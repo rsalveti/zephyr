@@ -1,0 +1,5 @@
+
+config  BOARD_NUCLEO_446RE
+        bool "ST NUCLEO-446RE Board"
+        select SOC_STM32F4X
+	depends on ARM
