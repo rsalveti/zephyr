@@ -1,0 +1,23 @@
+STM32 SoCs have a 4-level classification by family, series, lines and
+package. An example is given below:
+
+family (stm32)
+    |--- series (stm32f1)
+    |
+    |
+    |
+    |
+    |
+    |--- series (stm32f4)
+    .        |--- lines (stm32f401)
+    .        |         |--- package (stm32f401re)
+	     |         |--- package (stm32f401ce)
+	     |         .
+	     |         .
+	     |
+	     |--- lines (stm32f410)
+	     .
+	     .
+	     |--- lines (stm32f469)
+	     .
+	     .
