@@ -1,6 +1,6 @@
-# Kconfig.soc.family - ST STM32F4xx family SOC configuration options
+# Kconfig.defconfig.series - ST Microelectronics STM32F4 MCU line
 #
-# Copyright (c) 2016 Pawel Wodnicki 32bitmicro.com
+# Copyright (c) 2016 Linaro Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,25 +15,16 @@
 # limitations under the License.
 #
 
-choice
-prompt "STM32F4x MCU Selection"
-depends on SOC_STM32F4X
+if SOC_SERIES_STM32F4X
 
-config SOC_STM32F446RE
-	bool "ST STM32F466RE MCU"
+source "arch/arm/soc/st_stm32/stm32f4/Kconfig.defconfig.stm32f4*"
 
-endchoice
-
-if SOC_STM32F4X
-
-source "arch/arm/soc/st_stm32/stm32f4/Kconfig.soc.stm32f4*"
-
-config SOC
-	default st_stm32/stm32f4
+config SOC_SERIES
+	default stm32f4
 
 config NUM_IRQ_PRIO_BITS
         int
-        default 3
+        default 4
 
 config KERNEL_INIT_PRIORITY_DEFAULT
 	default 40
@@ -53,13 +44,6 @@ config PERIPHERAL_BASE_ADDRESS
     help
     The memory address for the Peripheral register location.
 
-config FSMC_REGISTER_BASE_ADDRESS
-	hex
-	default 0xA0000000
-	help
-	This is the memory address for the Flexible Static Memory Controller
-	(FSMC) registers.
-
 config VECTOR_TABLE_IN_SRAM
     bool
     default false
@@ -69,16 +53,18 @@ config VECTOR_TABLE_IN_SRAM
 
 choice
 	prompt "Select the clock source for the PLL"
-	default SOC_STM32_CLOCK_HSE
-	depends on SOC_STM32F4X
+	default SOC_STM32_CLOCK_HSI
+	depends on SOC_SERIES_STM32F4X
 
 config SOC_STM32_CLOCK_HSE
 	bool
+	prompt "High speed external clock"
 	help
 	Use the High Speed External clock signal (HSE)
 
 config SOC_STM32_CLOCK_HSI
 	bool
+	prompt "High speed internal clock"
 	help
 	Use the High Speed Internal clock signal (HSI)
 
@@ -89,4 +75,4 @@ config SYS_CLOCK_HW_CYCLES_PER_SEC
 	default 168000000
 
 
-endif #SOC_STM32F4X
+endif #SOC_SERIES_STM32F4X
