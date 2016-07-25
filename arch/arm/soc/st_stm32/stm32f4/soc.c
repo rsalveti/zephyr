@@ -32,13 +32,7 @@
 #include <device.h>
 #include <init.h>
 #include <soc.h>
-
-#ifdef CONFIG_RUNTIME_NMI
-extern void _NmiInit(void);
-#define NMI_INIT() _NmiInit()
-#else
-#define NMI_INIT()
-#endif
+#include <arch/cpu.h>
 
 /**
  * @brief Setup various clocks on the SoC
@@ -83,7 +77,7 @@ static void clock_init(void)
 	/*
 	 * Now that the CLK is setup, configure the main PLL
 	 */
-#ifdef CONFIG_SOC_STM32F4XX
+#ifdef CONFIG_SOC_SERIES_STM32F4XX
 	RCC->pllcfgr = STM32F4XX_PLL_M |
 			(STM32F4XX_PLL_N << 6) |
 #if defined(CONFIG_SOC_STM32_CLOCK_HSE)
