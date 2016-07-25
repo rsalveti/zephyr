@@ -1,7 +1,4 @@
+obj-y += soc.o
 
-arch-cflags = $(call cc-option,-mthumb -mcpu=cortex-m4) \
-			$(call cc-option,-mthumb -march=armv7e-m)
-
-KBUILD_AFLAGS += $(arch-cflags)
-KBUILD_CXXFLAGS += $(arch-cflags)
-KBUILD_CFLAGS += $(arch-cflags)
+#obj-$(CONFIG_GPIO) += soc_gpio.o
+#obj-$(CONFIG_PINMUX) += soc_config.o
