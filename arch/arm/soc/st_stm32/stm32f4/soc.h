@@ -511,6 +511,7 @@
 #include <drivers/rand32.h>
 
 #include "soc_registers.h"
+#include "soc_irq.h"
 
 /* uart configuration settings */
 #define UART_IRQ_FLAGS 0
