@@ -1,7 +1,6 @@
 # Kconfig.soc - ST Microelectronics STM32F4 MCU line
 #
-# Copyright (c) 2016 Pawel Wodnicki 32bitmicro.com
-#               2016 Linaro Limited.
+# Copyright (c) 2016 Linaro Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,17 +15,11 @@
 # limitations under the License.
 #
 
+choice
+prompt "STM32F4x MCU Selection"
+depends on SOC_SERIES_STM32F4X
+
 config SOC_STM32F401RE
-	bool
-	default n
-	help
-	SoC selection is done automatically when you pick a board. It is a hidden
-	option that you should not set directly.
+	bool "STM32F401RE"
 
-config SOC_STM32F446RE
-	bool
-	default n
-	help
-	SoC selection is done automatically when you pick a board. It is a hidden
-	option that you should not set directly.
-
+endchoice
