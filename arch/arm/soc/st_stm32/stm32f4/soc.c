@@ -1,7 +1,6 @@
 /*
- * Copyright (c) 2016 Pawel Wodnicki 32bitmicro.com
- * Copyright (c) 2016 Intel Corporation.
- * Copyright (c) 2013-2015 Wind River Systems, Inc.
+ * Copyright (c) 2016 Linaro Limited.
+ * Copyright (c) 2016 Open-RnD Sp. z o.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +17,7 @@
 
 /**
  * @file
- * @brief System/hardware module for ST STM32 family processor
- *
- * This module provides routines to initialize and support board-level hardware
- * for the ST STM32 family processor.
- *
- * Clock configuration
- * AN3988 Application note Clock configuration tool for STM32F40xx/41xx/427x/437x microcontrollers
- * DocID 022298 Rev 2
+ * @brief System/hardware module for STM32F4 processor
  */
 
 #include <nanokernel.h>
@@ -35,89 +27,7 @@
 #include <arch/cpu.h>
 
 /**
- * @brief Setup various clocks on the SoC
- *
- * By default this configures the system to use the HSE.
- *
- * Assumption:
- * SLCK = 32.768kHz
- */
-static void clock_init(void)
-{
-	uint32_t regtmp = 0;
-#if defined(CONFIG_SOC_STM32_CLOCK_HSE)
-	RCC->cr |= RCC_CR_HSEON;
-
-	/*
-	 * Time to spin until the HSE is ready.
-	 */
-	while (!(RCC->cr & RCC_CR_HSERDY)) {
-		regtmp = RCC->cr & RCC_CR_HSERDY;
-	}
-#elif defined(CONFIG_SOC_STM32_CLOCK_HSI)
-	RCC->cr |= RCC_CR_HSION;
-	/*
-	 * Time to spin until the HSI is ready.
-	 */
-	while (!(RCC->cr & RCC_CR_HSIRDY)) {
-		regtmp = RCC->cr & RCC_CR_HSIRDY;
-	}
-
-#endif
-
-
-	/*
-	 * This will setup the following values:
-	 * * HCLK = SYSCLK / 1
-	 * * PCLK2 = HCLK  / 2
-	 * * PCLK1 = HCLK  / 4
-	 */
-	RCC->cfgr |= (RCC_CFGR_HPRE_0 | RCC_CFGR_PPRE_2_2 | RCC_CFGR_PPRE_1_4);
-
-	/*
-	 * Now that the CLK is setup, configure the main PLL
-	 */
-#ifdef CONFIG_SOC_SERIES_STM32F4XX
-	RCC->pllcfgr = STM32F4XX_PLL_M |
-			(STM32F4XX_PLL_N << 6) |
-#if defined(CONFIG_SOC_STM32_CLOCK_HSE)
-			(RCC_CFGR_PLLSRC_HSE) |
-#elif defined(CONFIG_SOC_STM32_CLOCK_HSI)
-			(RCC_CFGR_PLLSRC_HSI) |
-#endif
-			(((STM32F4XX_PLL_P >> 1) - 1) << 16) |
-			(STM32F4XX_PLL_Q << 24) |
-			(STM32F4XX_PLL_R << 28);
-#endif
-	/*
-	 * If everything has gone right, at this point we can enable the PLL
-	 */
-	RCC->cr |= RCC_CR_PLLON;
-
-	/*
-	 * Now spin until the PLL is ready
-	 */
-	while ((RCC->cr & RCC_CR_PLLRDY) == 0) {
-		/* do nothing */
-	}
-
-	/*
-	 * The PLL is now ready! First clear out any possible values, then
-	 * select it as the system clock source
-	 */
-	regtmp = RCC->cfgr;
-	regtmp &= ~(RCC_CFGR_SW_MASK);
-	regtmp |= RCC_CFGR_SW_PLL;
-	RCC->cfgr = regtmp;
-
-	/* Once again, spin until this change is ready */
-	while ((RCC->cfgr & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_PLL) {
-		/* do nothing */
-	}
-}
-
-/**
- * @brief Perform basic hardware initialization at boot for STM32.
+ * @brief Perform basic hardware initialization at boot.
  *
  * This needs to be run from the very beginning.
  * So the init priority has to be 0 (zero).
@@ -144,11 +54,7 @@ static int st_stm32f4_init(struct device *arg)
 
 	_ScbHardFaultAllFaultsReset();
 
-	/* Setup master clock */
-	clock_init();
-
-	/*
-	 * Install default handler that simply resets the CPU
+	/* Install default handler that simply resets the CPU
 	 * if configured in the kernel, NOP otherwise
 	 */
 	NMI_INIT();
