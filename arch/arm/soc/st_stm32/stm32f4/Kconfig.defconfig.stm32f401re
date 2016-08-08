@@ -21,16 +21,14 @@ config SOC
 	string
 	default stm32f401re
 
-config NUM_IRQS
-	int
-	# must be >= the highest interrupt number used
-	# - include the UART interrupts
-	default 78
-
 config SRAM_SIZE
-	default 128
-
-config FLASH_SIZE
 	default 96
 
-endif #SOC_STM32F401RE
+config FLASH_SIZE
+	default 512
+
+config NUM_IRQS
+	int
+	default 85
+
+endif # SOC_STM32F401RE
