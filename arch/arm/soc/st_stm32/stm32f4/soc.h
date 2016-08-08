@@ -23,8 +23,8 @@
  *
  */
 
-#ifndef _STM32F4XX_SOC_H_
-#define _STM32F4XX_SOC_H_
+#ifndef _STM32F4X_SOC_H_
+#define _STM32F4X_SOC_H_
 
 
 #define HSE_VALUE		0x26000000
@@ -392,20 +392,20 @@
  * Pieces needed for setting up the clock
  */
 
-/* STM32F4XX */
+/* STM32F4X */
 /* PLL:VCO = (HSE_VALUE | HSI_VALUE) / PLL_M) * PLL_N */
-#define STM32F4XX_PLL_M			16
-#define STM32F4XX_PLL_N			336
+#define STM32F4X_PLL_M			16
+#define STM32F4X_PLL_N			336
 
-/* SYSCLK = PLL:VCO / STM32F4XX_PLL_P */
-#define STM32F4XX_PLL_P			2
+/* SYSCLK = PLL:VCO / STM32F4X_PLL_P */
+#define STM32F4X_PLL_P			2
 
-/* CLK48 = PLL:VCO / STM32F4XX_PLL_Q  */
-/*  STM32F4XX_PLL_Q */
-#define STM32F4XX_PLL_Q			7
+/* CLK48 = PLL:VCO / STM32F4X_PLL_Q  */
+/*  STM32F4X_PLL_Q */
+#define STM32F4X_PLL_Q			7
 
-/*  STM32F4XX_PLL_R */
-#define STM32F4XX_PLL_R			2
+/*  STM32F4X_PLL_R */
+#define STM32F4X_PLL_R			2
 
 /*
  * The following addresses all come from ST Document DocID 026976 Rev 2
@@ -532,4 +532,4 @@
 
 #endif /* !_ASMLANGUAGE */
 
-#endif /* _STM32F4XX_SOC_H_ */
+#endif /* _STM32F4X_SOC_H_ */
