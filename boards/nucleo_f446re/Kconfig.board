@@ -1,5 +1,0 @@
-
-config  BOARD_NUCLEO_F446RE
-	bool "ST NUCLEO-F446RE Board"
-	select SOC_STM32F446RE
-	depends on SOC_SERIES_STM32F4X
