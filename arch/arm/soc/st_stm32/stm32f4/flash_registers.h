@@ -14,11 +14,34 @@
  * limitations under the License.
  */
 
-#ifndef _STM32F4_SOC_REGISTERS_H_
-#define _STM32F4_SOC_REGISTERS_H_
+#ifndef _STM32F4X_FLASH_REGISTERS_H_
+#define _STM32F4X_FLASH_REGISTERS_H_
 
-/* include register mapping headers */
-#include "rcc_registers.h"
-#include "flash_registers.h"
+/**
+ * @brief
+ *
+ * Based on reference manual:
+ *
+ * Chapter 3.4: Embedded Flash Memory
+ */
 
-#endif /* _STM32F4_SOC_REGISTERS_H_ */
+enum {
+	STM32F4X_FLASH_LATENCY_0 = 0x0,
+	STM32F4X_FLASH_LATENCY_1 = 0x1,
+	STM32F4X_FLASH_LATENCY_2 = 0x2,
+	STM32F4X_FLASH_LATENCY_3 = 0x3,
+	STM32F4X_FLASH_LATENCY_4 = 0x4,
+	STM32F4X_FLASH_LATENCY_5 = 0x5,
+};
+
+/* 3.8.7 Embedded flash registers */
+struct stm32f4x_flash {
+	uint32_t acr;
+	uint32_t keyr;
+	uint32_t optkeyr;
+	uint32_t sr;
+	uint32_t cr;
+	uint32_t optcr;
+};
+
+#endif	/* _STM32F4X_FLASHREGISTERS_H_ */
