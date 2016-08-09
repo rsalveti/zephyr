@@ -398,6 +398,8 @@ static void uart_stm32_irq_config_func_1(struct device *dev)
 {
 #ifdef CONFIG_SOC_SERIES_STM32F1X
 #define PORT_1_IRQ STM32F1_IRQ_USART2
+#elif CONFIG_SOC_SERIES_STM32F4X
+#define PORT_1_IRQ STM32F4_IRQ_USART2
 #endif
 	IRQ_CONNECT(PORT_1_IRQ,
 		CONFIG_UART_STM32_PORT_1_IRQ_PRI,

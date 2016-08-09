@@ -18,14 +18,84 @@
 /**
  * @file SoC configuration macros for the ST STM32F4 family processors.
  *
- * Access line
- * DocID 026976 Rev 2 - RM0390 Reference manual STM32F446xx advanced ARM ® -based 32-bit MCUs
- *
+ * Based on reference manual:
+ * XXXX: TODO
  */
 
 #ifndef _STM32F4X_SOC_H_
 #define _STM32F4X_SOC_H_
 
+/* peripherals start address */
+#define PERIPH_BASE           0x40000000
+
+#define APB1PERIPH_BASE        PERIPH_BASE
+#define APB2PERIPH_BASE       (PERIPH_BASE + 0x10000)
+#define AHB1PERIPH_BASE       (PERIPH_BASE + 0x20000)
+#define AHB2PERIPH_BASE       (PERIPH_BASE + 0x10000000)
+
+/* UART */
+#define USART1_ADDR           (APB2PERIPH_BASE + 0x1000)
+#define USART2_ADDR           (APB1PERIPH_BASE + 0x4400)
+#define USART6_ADDR           (APB2PERIPH_BASE + 0x1400)
+
+/* Reset and Clock Control */
+#define RCC_BASE              (AHB1PERIPH_BASE + 0x3800)
+
+#define GPIO_REG_SIZE         0x400
+#define GPIOA_BASE            AHB1PERIPH_BASE
+#define GPIOB_BASE            (AHB1PERIPH_BASE + 0x0400)
+#define GPIOC_BASE            (AHB1PERIPH_BASE + 0x0800)
+#define GPIOD_BASE            (AHB1PERIPH_BASE + 0x0C00)
+#define GPIOE_BASE            (AHB1PERIPH_BASE + 0x1000)
+#define GPIOH_BASE            (AHB1PERIPH_BASE + 0x1C00)
+
+/* base address for where GPIO registers start */
+#define GPIO_PORTS_BASE       (GPIOA_BASE)
+
+/* EXTI */
+#define EXTI_BASE            (APB2PERIPH_BASE + 0x3C00)
+
+/* Watchdog */
+#define IWDG_BASE            (APB1PERIPH_BASE + 0x3000)
+#define WWDG_BASE            (APB1PERIPH_BASE + 0x2C00)
+
+/* RTC */
+#define RTC_BASE            (APB1PERIPH_BASE + 0x2800)
+
+/* FLASH */
+#define FLASH_BASE           (AHB1PERIPH_BASE + 0x3C00)
+
+/* TIMx timers */
+#define TIM5_BASE		         (APB1PERIPH_BASE + 0x0C00)
+#define TIM4_BASE		         (APB1PERIPH_BASE + 0x0800)
+#define TIM3_BASE		         (APB1PERIPH_BASE + 0x0400)
+#define TIM2_BASE		         APB1PERIPH_BASE
+
+
+
+#ifndef _ASMLANGUAGE
+
+#include <device.h>
+#include <misc/util.h>
+#include <drivers/rand32.h>
+
+#if 0
+/* IO pin functions */
+enum stm32f10x_pin_config_mode {
+	STM32F10X_PIN_CONFIG_BIAS_HIGH_IMPEDANCE,
+	STM32F10X_PIN_CONFIG_BIAS_PULL_UP,
+	STM32F10X_PIN_CONFIG_BIAS_PULL_DOWN,
+	STM32F10X_PIN_CONFIG_ANALOG,
+	STM32F10X_PIN_CONFIG_DRIVE_OPEN_DRAIN,
+	STM32F10X_PIN_CONFIG_DRIVE_PUSH_PULL,
+	STM32F10X_PIN_CONFIG_AF_PUSH_PULL,
+	STM32F10X_PIN_CONFIG_AF_OPEN_DRAIN,
+};
+#endif /* 0 */
+
+#include "soc_irq.h"
+
+#endif /* !_ASMLANGUAGE */
 
 #define HSE_VALUE		0x26000000
 #define HSE_STARTUP_TIMEOUT	0x0500
@@ -38,7 +108,6 @@
 			     ((0x01) << 16) | \
 			     ((0x03) << 8)  | \
 			     ((0x00)))
-#include <misc/util.h>
 
 /*
  * @brief RCC Clock Control Register (RCC_CR)
@@ -408,11 +477,11 @@
 #define STM32F4X_PLL_R			2
 
 /*
- * The following addresses all come from ST Document DocID 026976 Rev 2
- * 2.2.2 Memory map and register boundary addresses
+ * The following addresses all come from ST Document DocID 025644 Rev 3
+ * Section 5. Memory mapping
  *
  */
-
+#if 0
 #define FMC_BASE        0xA0000000
 
 #define QUADSPI_BASE    0xA0001000
@@ -430,7 +499,6 @@
 
 #define BKPSRAM			0x40024000
 #define FLASH_INT_BASE	0x40023C00
-#define RCC_BASE		0x40023800
 
 #define CRC_BASE		0x40023000
 
@@ -450,7 +518,7 @@
 #define TIM11_BASE		0x40014800
 #define TIM10_BASE		0x40014400
 #define TIM9_BASE		0x40014000
-#define EXTI_BASE		0x40013C00
+
 #define SYSCFG_BASE		0x40013800
 
 #define SPI4_BASE		0x40013400
@@ -480,30 +548,17 @@
 #define I2C2_BASE		0x40005800
 #define I2C1_BASE		0x40005400
 
-#define UART5_BASE		0x40005000
-#define UART4_BASE		0x40004C00
-#define USART3_BASE		0x40004800
-#define USART2_BASE		0x40004400
-
 #define SPDIF_RX_BASE	0x40004000
 
 #define SPI3_BASE		0x40003C00
 #define SPI2_BASE		0x40003800
 
-#define IWDG_BASE		0x40003000
-#define WWDG_BASE		0x40002C00
-#define RTC_BASE		0x40002800
+//#define TIM14_BASE		0x40002000
+//#define TIM12_BASE		0x40001C00
+//#define TIM7_BASE		0x40001800
+//#define TIM6_BASE		0x40001400
 
-#define TIM14_BASE		0x40002000
-#define TIM12_BASE		0x40001C00
-#define TIM7_BASE		0x40001800
-#define TIM6_BASE		0x40001400
-#define TIM5_BASE		0x40000C00
-#define TIM4_BASE		0x40000800
-#define TIM3_BASE		0x40000400
-#define TIM2_BASE		0x40000000
-
-
+#endif /* 0 */
 
 #ifndef _ASMLANGUAGE
 
