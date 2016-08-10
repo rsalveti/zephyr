@@ -1,5 +1,7 @@
 obj-y += soc.o
 
+obj-$(CONFIG_GPIO) += soc_gpio.o
+
 KERNEL_HEX_NAME = $(KERNEL_NAME).hex
 
 quiet_cmd_gen_hex = HEX     $@
