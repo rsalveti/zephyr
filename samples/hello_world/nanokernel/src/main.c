@@ -31,9 +31,19 @@
  * Nanokernel version of hello world demo
  */
 
+/* Create our own delay routine so we don't need timers to work */
+void doze(int duration)
+{
+	int i;
+
+	for (i=0; i < duration; i++) {}
+}
 
 void main(void)
 {
-	PRINT("Hello World! %s\n", CONFIG_ARCH);
+	while (1) {
+		PRINT("Hello World! %s\n", CONFIG_ARCH);
+		doze(1000000000);
+	}
 }
 
