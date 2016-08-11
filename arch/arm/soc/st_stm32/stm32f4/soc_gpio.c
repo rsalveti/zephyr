@@ -192,8 +192,8 @@ int stm32_gpio_configure(uint32_t *base_addr, int pin, int conf, int altf)
 
 	if (otype) {
 		tmpreg = gpio->otype;
-		tmpreg &= ~(0x3 << (pin * 2));
-		tmpreg |= (otype << (pin * 2));
+		tmpreg &= ~(0x1 << pin);
+		tmpreg |= (otype << pin);
 		gpio->otype = tmpreg;
 	}
 
@@ -205,8 +205,8 @@ int stm32_gpio_configure(uint32_t *base_addr, int pin, int conf, int altf)
 	}
 
 	tmpreg = gpio->pupdr;
-	tmpreg &= ~(0x1 << pin);
-	tmpreg |= (pupd << pin);
+	tmpreg &= ~(0x3 << (pin * 2));
+	tmpreg |= (pupd << (pin * 2));
 	gpio->pupdr = tmpreg;
 
 	return 0;
