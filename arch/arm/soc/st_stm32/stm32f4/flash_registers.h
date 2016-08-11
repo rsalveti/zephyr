@@ -34,9 +34,23 @@ enum {
 	STM32F4X_FLASH_LATENCY_5 = 0x5,
 };
 
+union __flash_acr {
+	uint32_t val;
+	struct {
+		uint32_t latency :4 __packed;
+		uint32_t rsvd__4_7 :4 __packed;
+		uint32_t prften :1 __packed;
+		uint32_t icen :1 __packed;
+		uint32_t dcen :1 __packed;
+		uint32_t icrst :1 __packed;
+		uint32_t dcrst :1 __packed;
+		uint32_t rsvd__13_31 :19 __packed;
+	} bit;
+};
+
 /* 3.8.7 Embedded flash registers */
 struct stm32f4x_flash {
-	uint32_t acr;
+	union __flash_acr acr;
 	uint32_t keyr;
 	uint32_t optkeyr;
 	uint32_t sr;
