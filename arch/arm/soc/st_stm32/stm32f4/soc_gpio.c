@@ -236,6 +236,27 @@ int stm32_gpio_get(uint32_t *base, int pin)
 
 int stm32_gpio_enable_int(int port, int pin)
 {
-	/* TODO: Add support for int */
-	return -EINVAL;
+	volatile struct stm32f4x_syscfg *syscfg =
+		(struct stm32f4x_syscfg *)SYSCFG_BASE;
+	volatile union __syscfg_exticr *exticr;
+	int shift = 0;
+
+	if (pin <= 3) {
+		exticr = &syscfg->exticr1;
+	} else if (pin <= 7) {
+		exticr = &syscfg->exticr2;
+	} else if (pin <= 11) {
+		exticr = &syscfg->exticr3;
+	} else if (pin <= 15) {
+		exticr = &syscfg->exticr4;
+	} else {
+		return -EINVAL;
+	}
+
+	shift = 4 * (pin % 4);
+
+	exticr->val &= ~(0xf << shift);
+	exticr->val |= port << shift;
+
+	return 0;
 }
