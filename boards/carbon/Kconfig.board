@@ -1,4 +1,3 @@
 config  BOARD_CARBON
 	bool "Carbon"
-	select SOC_STM32F401RE
-	depends on SOC_SERIES_STM32F4X
+	depends on SOC_STM32F401RE
