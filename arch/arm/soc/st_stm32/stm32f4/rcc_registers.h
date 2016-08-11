@@ -70,6 +70,11 @@ enum {
   * @brief Reset and Clock Control
   */
 
+/* Helpers */
+enum {
+	STM32F4X_RCC_APB1ENR_PWREN = 0x10000000U,
+};
+
 union __rcc_cr {
 	uint32_t val;
 	struct {
@@ -96,7 +101,9 @@ union __rcc_cr {
 union __rcc_pllcfgr {
 	uint32_t val;
 	struct {
-		uint32_t pllmn :16 __packed;
+		uint32_t pllm :6 __packed;
+		uint32_t plln :9 __packed;
+		uint32_t rsvd__15 :1 __packed;
 		uint32_t pllp :2 __packed;
 		uint32_t rsvd__18_21 :4 __packed;
 		uint32_t pllsrc :1 __packed;
@@ -155,6 +162,7 @@ struct stm32f4x_rcc {
 	uint32_t rsvd6[2];
 	uint32_t sscgr;
 	uint32_t plli2scfgr;
+	uint32_t rsvd7;
 	uint32_t dckcfgr;
 };
 
