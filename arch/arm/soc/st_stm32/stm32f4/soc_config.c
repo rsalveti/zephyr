@@ -23,11 +23,19 @@
 #include <drivers/clock_control/stm32_clock_control.h>
 
 static const stm32_pin_func_t pin_pb6_funcs[] = {
-	[STM32F4_PINMUX_FUNC_PB6_USART1_TX - 1] = STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
+	[STM32F4_PINMUX_FUNC_PB6_USART1_TX - 1] = STM32F4X_PIN_CONFIG_AF_PUSH_UP,
 };
 
 static const stm32_pin_func_t pin_pb7_funcs[] = {
-	[STM32F4_PINMUX_FUNC_PB7_USART1_RX - 1] = STM32F4X_PIN_CONFIG_BIAS_HIGH_IMPEDANCE,
+	[STM32F4_PINMUX_FUNC_PB7_USART1_RX - 1] = STM32F4X_PIN_CONFIG_AF_PUSH_UP,
+};
+
+static const stm32_pin_func_t pin_pa2_funcs[] = {
+	[STM32F4_PINMUX_FUNC_PA2_USART2_TX - 1] = STM32F4X_PIN_CONFIG_AF_PUSH_UP,
+};
+
+static const stm32_pin_func_t pin_pa3_funcs[] = {
+	[STM32F4_PINMUX_FUNC_PA3_USART2_RX - 1] = STM32F4X_PIN_CONFIG_AF_PUSH_UP,
 };
 
 /**
@@ -36,6 +44,8 @@ static const stm32_pin_func_t pin_pb7_funcs[] = {
 static struct stm32_pinmux_conf pins[] = {
 	STM32_PIN_CONF(STM32_PIN_PB6, pin_pb6_funcs),
 	STM32_PIN_CONF(STM32_PIN_PB7, pin_pb7_funcs),
+	STM32_PIN_CONF(STM32_PIN_PA2, pin_pa2_funcs),
+	STM32_PIN_CONF(STM32_PIN_PA3, pin_pa3_funcs),
 };
 
 int stm32_get_pin_config(int pin, int func)
