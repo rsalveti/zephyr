@@ -43,19 +43,25 @@ static inline int stm32f4x_clock_control_on(struct device *dev,
 	struct stm32f4x_rcc_data *data = dev->driver_data;
 	volatile struct stm32f4x_rcc *rcc = (struct stm32f4x_rcc *)(data->base);
 	struct stm32f4x_pclken *pclken = (struct stm32f4x_pclken *)(sub_system);
+	/* Register delay helper */
+	uint32_t tmpreg = 0;
 
 	switch (pclken->bus) {
 	case STM32F4X_CLOCK_BUS_AHB1:
 		rcc->ahb1enr |= pclken->enr;
+		tmpreg = rcc->ahb1enr;
 		break;
 	case STM32F4X_CLOCK_BUS_AHB2:
 		rcc->ahb2enr |= pclken->enr;
+		tmpreg = rcc->ahb2enr;
 		break;
 	case STM32F4X_CLOCK_BUS_APB1:
 		rcc->apb1enr |= pclken->enr;
+		tmpreg = rcc->apb1enr;
 		break;
 	case STM32F4X_CLOCK_BUS_APB2:
 		rcc->apb2enr |= pclken->enr;
+		tmpreg = rcc->apb2enr;
 		break;
 	}
 
@@ -68,19 +74,25 @@ static inline int stm32f4x_clock_control_off(struct device *dev,
 	struct stm32f4x_rcc_data *data = dev->driver_data;
 	volatile struct stm32f4x_rcc *rcc = (struct stm32f4x_rcc *)(data->base);
 	struct stm32f4x_pclken *pclken = (struct stm32f4x_pclken *)(sub_system);
+	/* Register delay helper */
+	uint32_t tmpreg = 0;
 
 	switch (pclken->bus) {
 	case STM32F4X_CLOCK_BUS_AHB1:
 		rcc->ahb1enr &= ~pclken->enr;
+		tmpreg = rcc->ahb1enr;
 		break;
 	case STM32F4X_CLOCK_BUS_AHB2:
 		rcc->ahb2enr &= ~pclken->enr;
+		tmpreg = rcc->ahb2enr;
 		break;
 	case STM32F4X_CLOCK_BUS_APB1:
 		rcc->apb1enr &= ~pclken->enr;
+		tmpreg = rcc->apb1enr;
 		break;
 	case STM32F4X_CLOCK_BUS_APB2:
 		rcc->apb2enr &= ~pclken->enr;
+		tmpreg = rcc->apb2enr;
 		break;
 	}
 
@@ -233,16 +245,19 @@ static inline void __setup_flash(void)
 {
 	volatile struct stm32f4x_flash *flash =
 		(struct stm32f4x_flash *)(FLASH_R_BASE);
-	uint8_t *acr = (uint8_t *) &flash->acr;
+	uint32_t tmpreg = 0;
 
 	/* TODO: Make it to also take voltage into account, for now assuming 3.3V */
 	if (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC <= 30000000) {
-		*acr = STM32F4X_FLASH_LATENCY_0;
+		flash->acr.bit.latency = STM32F4X_FLASH_LATENCY_0;
 	} else if (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC <= 60000000) {
-		*acr = STM32F4X_FLASH_LATENCY_1;
+		flash->acr.bit.latency = STM32F4X_FLASH_LATENCY_1;
 	} else if (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC <= 84000000) {
-		*acr = STM32F4X_FLASH_LATENCY_2;
+		flash->acr.bit.latency = STM32F4X_FLASH_LATENCY_2;
 	}
+
+	/* Make sure latency was set */
+	tmpreg = flash->acr.bit.latency;
 }
 
 int stm32f4x_clock_control_init(struct device *dev)
@@ -261,6 +276,12 @@ int stm32f4x_clock_control_init(struct device *dev)
 	uint32_t pllpdiv = __pllp_div(CONFIG_CLOCK_STM32F4X_PLLP_DIV_FACTOR);
 	uint32_t pllqdiv = CONFIG_CLOCK_STM32F4X_PLLQ_DIV_FACTOR;
 #endif	/* CONFIG_CLOCK_STM32F4X_SYSCLK_SRC_PLL */
+	/* Register delay helper */
+	uint32_t tmpreg = 0;
+
+	/* Enable power control clock */
+	rcc->apb1enr |= STM32F4X_RCC_APB1ENR_PWREN;
+	tmpreg = rcc->apb1enr;
 
 	/* disable PLL */
 	rcc->cr.bit.pllon = 0;
@@ -279,6 +300,8 @@ int stm32f4x_clock_control_init(struct device *dev)
 	while (rcc->cr.bit.hsirdy != 1) {
 	}
 
+	/* TODO: should we care about HSI calibration adjustment? */
+
 	/* PLL input from HSI */
 	rcc->pllcfgr.bit.pllsrc = STM32F4X_RCC_CFG_PLL_SRC_HSI;
 #endif	/* CONFIG_CLOCK_STM32F4X_PLL_SRC_HSI */
@@ -288,6 +311,8 @@ int stm32f4x_clock_control_init(struct device *dev)
 	rcc->cr.bit.hseon = 1;
 	while (rcc->cr.bit.hserdy != 1) {
 	}
+
+	/* TODO: should we disable HSI if HSE gets used? */
 
 	rcc->pllcfgr.bit.pllsrc = STM32F4X_RCC_CFG_PLL_SRC_HSE;
 #endif	/* CONFIG_CLOCK_STM32F4X_PLL_SRC_HSE */
@@ -303,8 +328,8 @@ int stm32f4x_clock_control_init(struct device *dev)
 
 #ifdef CONFIG_CLOCK_STM32F4X_SYSCLK_SRC_PLL
 	/* default set of dividers and multipliers (PLL must be disabled) */
-	/* PLLN can only be set with half-word and word access */
-	rcc->pllcfgr.bit.pllmn = pllmdiv | (pllnmul << 6);
+	rcc->pllcfgr.bit.pllm = pllmdiv;
+	rcc->pllcfgr.bit.plln = pllnmul;
 	rcc->pllcfgr.bit.pllp = pllpdiv;
 	rcc->pllcfgr.bit.pllq = pllqdiv;
 
