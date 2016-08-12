@@ -381,7 +381,7 @@ static void __stm32_exti_connect_irqs(struct device *dev)
 		CONFIG_EXTI_STM32_EXTI21_IRQ_PRI,
 		__stm32_exti_isr_21, DEVICE_GET(exti_stm32),
 		0);
-	IRQ_CONNECT(STM32F4_IRQ_EXTI2,
+	IRQ_CONNECT(STM32F4_IRQ_EXTI22,
 		CONFIG_EXTI_STM32_EXTI22_IRQ_PRI,
 		__stm32_exti_isr_22, DEVICE_GET(exti_stm32),
 		0);
