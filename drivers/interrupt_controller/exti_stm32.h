@@ -41,14 +41,14 @@
  *
  * @param line EXTI# line
  */
-void stm32_exti_enable(struct device *dev, int line);
+void stm32_exti_enable(int line);
 
 /**
  * @brief disable EXTI interrupt for specific line
  *
  * @param line EXTI# line
  */
-void stm32_exti_disable(struct device *dev, int line);
+void stm32_exti_disable(int line);
 
 /**
  * @brief EXTI trigger flags
@@ -66,7 +66,7 @@ enum stm32_exti_trigger {
  * @param line EXTI# line
  * @param trg  OR'ed stm32_exti_trigger flags
  */
-void stm32_exti_trigger(struct device *dev, int line, int trg);
+void stm32_exti_trigger(int line, int trg);
 
 /* callback for exti interrupt */
 typedef void (*stm32_exti_callback_t) (int line, void *user);
@@ -78,14 +78,13 @@ typedef void (*stm32_exti_callback_t) (int line, void *user);
  * @param cb   user callback
  * @param arg  user arg
  */
-void stm32_exti_set_callback(struct device *dev, int line,
-			stm32_exti_callback_t cb, void *data);
+void stm32_exti_set_callback(int line, stm32_exti_callback_t cb, void *data);
 
 /**
  * @brief unset EXTI interrupt callback
  *
  * @param line EXI# line
  */
-void stm32_exti_unset_callback(struct device *dev, int line);
+void stm32_exti_unset_callback(int line);
 
 #endif /* _STM32_EXTI_H_ */
