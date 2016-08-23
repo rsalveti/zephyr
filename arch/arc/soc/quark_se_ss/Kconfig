@@ -1,7 +1,5 @@
-# Kconfig - ARM architecture configuration options
-
 #
-# Copyright (c) 2014-2015 Wind River Systems, Inc.
+# Copyright (c) 2016 Intel Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,30 +14,15 @@
 # limitations under the License.
 #
 
-choice
-	prompt "ARM SoC Selection"
-	default SOC_SERIES_KINETIS_K6X
-	depends on ARM
+if ARC && SOC_QUARK_SE_SS
 
-	source "arch/arm/soc/*/Kconfig.soc"
-endchoice
+if IPM
+config QUARK_SE_SS_IPM_IRQ_PRI
+	int "IPM interrupt priority"
+	default 1
+	help
+	Priority level for interrupts coming in from the inter-processor
+	mailboxes.
 
-menu "ARM Options"
-	depends on ARM
-
-config ARCH
-	default "arm"
-
-config ARCH_DEFCONFIG
-	string
-	default "arch/arm/defconfig"
-
-
-source "arch/arm/core/Kconfig"
-
-menu "Board Configuration"
-
-source "arch/arm/soc/*/Kconfig"
-
-endmenu
-endmenu
+endif # IPM
+endif # SOC_QUARK_SE_SS

@@ -158,7 +158,7 @@
 #define ENC28J60_BIT_MACON3_FULDPX (0x01)
 #define ENC28J60_BIT_ECON1_TXRST   (0x80)
 #define ENC28J60_BIT_ECON1_TXRTS   (0x08)
-#define ENC28J60_BIT_ECON1_RXEN    (0x02)
+#define ENC28J60_BIT_ECON1_RXEN    (0x04)
 #define ENC28J60_BIT_ECON2_PKTDEC  (0x40)
 #define ENC28J60_BIT_EIR_PKTIF     (0x40)
 #define ENC28J60_BIT_EIE_TXIE      (0x08)
@@ -216,7 +216,7 @@
 #define RSV_SIZE 4
 
 /* Fiber Configuration */
-#define ENC28J60_FIBER_STACK_SIZE 256
+#define ENC28J60_FIBER_STACK_SIZE 512
 #define ENC28J60_FIBER_PRIORITY   100
 
 /* Microchip's OUI*/
@@ -242,6 +242,7 @@ struct eth_enc28j60_runtime {
 	uint8_t  rx_rsv[RSV_SIZE];
 	struct nano_sem tx_sem;
 	struct nano_sem int_sem;
+	struct nano_sem spi_sem;
 	void (*receive_callback)(uint8_t *buffer, uint16_t len);
 };
 
