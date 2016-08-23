@@ -1555,7 +1555,7 @@ typedef struct
 
 #if (__FPU_PRESENT == 1U)
   #define FPU_BASE          (SCS_BASE +  0x0F30UL)                    /*!< Floating Point Unit */
-  #define FPU               ((FPU_Type       *)     FPU_BASE      )   /*!< Floating Point Unit */
+  #define FPU_REG           ((FPU_Type       *)     FPU_BASE      )   /*!< Floating Point Unit */
 #endif
 
 /*@} */
