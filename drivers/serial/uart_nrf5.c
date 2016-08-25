@@ -92,6 +92,12 @@ struct uart_nrf5_dev_data_t {
 #define UART_IRQ_MASK_TX	(1 << 3)
 #define UART_IRQ_MASK_ERROR	(1 << 4)
 
+#ifdef CONFIG_SOC_SERIES_NRF51X
+#define NRF5_IRQ_UART_IRQn	NRF51_IRQ_UART0_IRQn
+#else /* CONFIG_SOC_SERIES_NRF52X */
+#define NRF5_IRQ_UART_IRQn	NRF52_IRQ_UARTE0_UART0_IRQn
+#endif
+
 static struct uart_driver_api uart_nrf5_driver_api;
 
 /**
@@ -460,10 +466,10 @@ DEVICE_INIT(uart_nrf5_0, CONFIG_UART_NRF5_NAME, &uart_nrf5_init,
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 static void uart_nrf5_irq_config(struct device *port)
 {
-	IRQ_CONNECT(NRF52_IRQ_UARTE0_UART0_IRQn,
+	IRQ_CONNECT(NRF5_IRQ_UART_IRQn,
 		    CONFIG_UART_NRF5_IRQ_PRI,
 		    uart_nrf5_isr, DEVICE_GET(uart_nrf5_0),
 		    0);
-	irq_enable(NRF52_IRQ_UARTE0_UART0_IRQn);
+	irq_enable(NRF5_IRQ_UART_IRQn);
 }
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
