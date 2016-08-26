@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Wind River Systems, Inc.
+ * Copyright (c) 2016 Abelon Systems, Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,18 +56,24 @@ SECTION_FUNC(TEXT, _isr_wrapper)
 
 	_GDB_STUB_EXC_ENTRY
 
-	push {lr}		/* lr is now the first item on the stack */
+	push {r7}
+	mov r7, lr
+	push {r7}		/* lr is now the first item on the stack */
 
 #ifdef CONFIG_KERNEL_EVENT_LOGGER_INTERRUPT
-	push {lr}
+	mov r7, lr
+	push {r7}
 	bl _sys_k_event_logger_interrupt
-	pop {lr}
+	pop {r7}
+	mov lr, r7
 #endif
 
 #ifdef CONFIG_KERNEL_EVENT_LOGGER_SLEEP
-	push {lr}
+	mov r7, lr
+	push {r7}
 	bl _sys_k_event_logger_exit_sleep
-	pop {lr}
+	pop {r7}
+	mov lr, r7
 #endif
 
 #ifdef CONFIG_SYS_POWER_MANAGEMENT
@@ -93,16 +100,19 @@ SECTION_FUNC(TEXT, _isr_wrapper)
 #endif
 
 	mrs r0, IPSR	/* get exception number */
-	sub r0, r0, #16	/* get IRQ number */
-	lsl r0, r0, #3	/* table is 8-byte wide */
+	ldr r1, =16
+	subs r0, r1	/* get IRQ number */
+	lsls r0, #3	/* table is 8-byte wide */
 	ldr r1, =_sw_isr_table
 	add r1, r1, r0	/* table entry: ISRs must have their MSB set to stay
 			 *			  in thumb mode */
 
-	ldmia r1,{r0,r3}	/* arg in r0, ISR in r3 */
+	ldm r1!,{r0,r3}	/* arg in r0, ISR in r3 */
 	blx r3		/* call ISR */
 
-	pop {lr}
+	pop {r7}
+	mov lr, r7
+	pop {r7}
 
 	/* exception return is done in _IntExit(), including _GDB_STUB_EXC_EXIT */
 	b _IntExit

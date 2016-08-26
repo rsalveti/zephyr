@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Wind River Systems, Inc.
+ * Copyright (c) 2016 Abelon Systems, Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,9 +61,11 @@ SECTION_FUNC(TEXT, __pendsv)
 
 #ifdef CONFIG_KERNEL_EVENT_LOGGER_CONTEXT_SWITCH
 	/* Register the context switch */
-	push {lr}
+	mov r0, lr
+	push {r0}
 	bl _sys_k_event_logger_context_switch
-	pop {lr}
+	pop {r0}
+	mov lr r0
 #endif
 
     /* load _Nanokernel into r1 and current tTCS into r2 */
@@ -70,7 +73,9 @@ SECTION_FUNC(TEXT, __pendsv)
     ldr r2, [r1, #__tNANO_current_OFFSET]
 
     /* addr of callee-saved regs in TCS in r0 */
-    add r0, r2, #__tTCS_preempReg_OFFSET
+    ldr r0, =__tTCS_preempReg_OFFSET
+    add r0, r2
+    mov r2, r0
 
     /* save callee-saved + psp in TCS */
     mrs ip, PSP
@@ -88,7 +93,8 @@ SECTION_FUNC(TEXT, __pendsv)
      * to pend PendSV have been taken with the current kernel
      * state and this is what we're handling currently.
      */
-    ldr ip, =_SCS_ICSR
+    ldr r3, =_SCS_ICSR
+    mov ip, r3
     ldr r3, =_SCS_ICSR_UNPENDSV
 
     /* protect the kernel state while we play with the thread lists */
@@ -125,7 +131,8 @@ SECTION_FUNC(TEXT, __pendsv)
      */
 
     /* _SCS_ICSR is still in ip and _SCS_ICSR_UNPENDSV in r3 */
-    str r3, [ip, #0]
+    mov r4, ip
+    str r3, [r4, #0]
 
     /* restore BASEPRI for the incoming thread */
     ldr r0, [r2, #__tTCS_basepri_OFFSET]
@@ -170,18 +177,22 @@ SECTION_FUNC(TEXT, __svc)
 
     ldr r0, [r0, #24]   /* grab address of PC from stack frame */
     /* SVC is a two-byte instruction, point to it and read  encoding */
-    ldrh r0, [r0, #-2]
+    ldr r1, =-2
+    ldrh r0, [r0, r1]
 
    /*
     * grab service call number: if zero, it's a context switch;  if not,
     * it's an irq offload
     */
-    ands r0, #0xff
+    ldr r1, =0xff
+    ands r0, r1
     beq _context_switch
 
-    push {lr}
+    mov r0, lr
+    push {r0}
     blx _irq_do_offload  /* call C routine which executes the offload */
-    pop {lr}
+    pop {r0}
+    mov lr, r0
 
     /* exception return is done in _IntExit(), including _GDB_STUB_EXC_EXIT */
     b _IntExit

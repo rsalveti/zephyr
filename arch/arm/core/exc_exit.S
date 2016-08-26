@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2014 Wind River Systems, Inc.
+ * Copyright (c) 2016 Abelon Systems, Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,10 +41,7 @@ GDATA(_nanokernel)
 #if CONFIG_GDB_INFO
   #define _EXIT_EXC_IF_FIBER_PREEMPTED beq _ExcExitWithGdbStub
 #else
-  _EXIT_EXC_IF_FIBER_PREEMPTED:      .macro
-                                     it eq
-                                     bxeq lr
-                                     .endm
+  #define _EXIT_EXC_IF_FIBER_PREEMPTED beq _EXIT_EXC
 #endif
 #define _EXIT_EXC_IF_FIBER_NOT_READY _EXIT_EXC_IF_FIBER_PREEMPTED
 
@@ -94,7 +92,8 @@ SECTION_SUBSEC_FUNC(TEXT, _HandlerModeExit, _ExcExit)
 
     /* is the current thread preemptible (task) ? */
     ldr r2, [r1, #__tNANO_flags_OFFSET]
-    ands.w r2, #PREEMPTIBLE
+    ldr r3, =PREEMPTIBLE
+    ands r2, r3
     _EXIT_EXC_IF_FIBER_PREEMPTED
 
     /* is there a fiber ready ? */
@@ -110,5 +109,7 @@ SECTION_SUBSEC_FUNC(TEXT, _HandlerModeExit, _ExcExit)
 _ExcExitWithGdbStub:
 
     _GDB_STUB_EXC_EXIT
+
+_EXIT_EXC:
 
     bx lr

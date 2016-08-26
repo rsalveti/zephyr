@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Wind River Systems, Inc.
+ * Copyright (c) 2016 Abelon Systems, Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,17 +52,20 @@ SECTION_FUNC(TEXT, _exc_wrapper)
 
 	/* r0 now contains the pointer to the full ESF */
 
-	push {lr}	/* lr is now the first item on the stack */
+	mov r7, lr
+	push {r7}	/* lr is now the first item on the stack */
 
 	ldr r1, =_sw_exc_table
 
 	mrs r2, IPSR	/* get exception number */
 
 	/* find and call handler: table is 4-bytes wide, shift index by 2 */
-	ldr r1, [r1, r2, LSL #2]
+	lsls r3, r2, #2
+	ldr r1, [r1, r3]
 	blx r1
 
-	pop {lr}
+	pop {r7}
+	mov lr, r7
 
 	/* exception return is done in _ExcExit(), including _GDB_STUB_EXC_EXIT */
 	b _ExcExit
