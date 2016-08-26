@@ -1,11 +1,6 @@
-From: Ricard Salveti <ricardo.salveti@linaro.org>
-Subject: boards: 96b_carbon_nrf51: add support for 96Boards Carbon nRF51 chip
+From: Ricardo Salveti <ricardo.salveti@linaro.org>
+Subject: cortex_m/reset.S: add reset workaround for NRF51822
 
-This adds support for the nRF51 chip on the board. If you'd like to run
-zephyr on the STM32F4 chip on Carbon, you need to use the board support
-specifically for STM32.
-
-Change-Id: I0cc6a6961c43b9e0c8ffae3a42fbcc089b090803
+Change-Id: Idf6f4a0262ff20b79891152a630bfb45ef14a5d0
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
 Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
-Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
