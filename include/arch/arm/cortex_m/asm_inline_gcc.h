@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2015, Wind River Systems, Inc.
+ * Copyright (c) 2016 Abelon Systems, Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,17 +58,11 @@ extern "C" {
 
 static ALWAYS_INLINE unsigned int find_msb_set(uint32_t op)
 {
-	unsigned int bit;
+	if (!op) {
+		return 0;
+	}
 
-	__asm__ volatile(
-		"cmp %1, #0;\n\t"
-		"itt ne;\n\t"
-		"   clzne %1, %1;\n\t"
-		"   rsbne %0, %1, #32;\n\t"
-		: "=r"(bit)
-		: "r"(op));
-
-	return bit;
+	return 32 - __builtin_clz(op);
 }
 
 
@@ -85,18 +80,7 @@ static ALWAYS_INLINE unsigned int find_msb_set(uint32_t op)
 
 static ALWAYS_INLINE unsigned int find_lsb_set(uint32_t op)
 {
-	unsigned int bit;
-
-	__asm__ volatile(
-		"rsb %0, %1, #0;\n\t"
-		"ands %0, %0, %1;\n\t" /* r0 = x & (-x): only LSB set */
-		"itt ne;\n\t"
-		"   clzne %0, %0;\n\t" /* count leading zeroes */
-		"   rsbne %0, %0, #32;\n\t"
-		: "=&r"(bit)
-		: "r"(op));
-
-	return bit;
+	return __builtin_ffs(op);
 }
 
 
