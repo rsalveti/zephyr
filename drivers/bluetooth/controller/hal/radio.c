@@ -119,15 +119,17 @@ void radio_pkt_configure(uint8_t preamble16, uint8_t bits_len, uint8_t max_len)
 			     RADIO_PCNF0_S0LEN_Msk) |
 			     ((((uint32_t)bits_len) << RADIO_PCNF0_LFLEN_Pos) &
 			       RADIO_PCNF0_LFLEN_Msk) |
-			     ((((uint32_t)8-bits_len) <<
-			       RADIO_PCNF0_S1LEN_Pos) &
-			       RADIO_PCNF0_S1LEN_Msk) |
+#if !defined(CONFIG_SOC_SERIES_NRF51X)
 			     (((RADIO_PCNF0_S1INCL_Include) <<
 			       RADIO_PCNF0_S1INCL_Pos) &
 			       RADIO_PCNF0_S1INCL_Msk) |
 			     ((((preamble16) ? RADIO_PCNF0_PLEN_16bit :
 			       RADIO_PCNF0_PLEN_8bit) << RADIO_PCNF0_PLEN_Pos) &
-			       RADIO_PCNF0_PLEN_Msk));
+			       RADIO_PCNF0_PLEN_Msk) |
+#endif
+			     ((((uint32_t)8-bits_len) <<
+			       RADIO_PCNF0_S1LEN_Pos) &
+			       RADIO_PCNF0_S1LEN_Msk));
 
 	NRF_RADIO->PCNF1 = (((((uint32_t)max_len) << RADIO_PCNF1_MAXLEN_Pos) &
 			     RADIO_PCNF1_MAXLEN_Msk) |
@@ -426,10 +428,12 @@ void *radio_ccm_rx_pkt_set(struct ccm *ccm, void *pkt)
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Disabled;
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Enabled;
 	NRF_CCM->MODE =
-	    ((CCM_MODE_MODE_Decryption << CCM_MODE_MODE_Pos) &
-	     CCM_MODE_MODE_Msk) |
+#if !defined(CONFIG_SOC_SERIES_NRF51X)
 	    ((CCM_MODE_LENGTH_Extended << CCM_MODE_LENGTH_Pos) &
-	       CCM_MODE_LENGTH_Msk);
+	       CCM_MODE_LENGTH_Msk) |
+#endif
+	    ((CCM_MODE_MODE_Decryption << CCM_MODE_MODE_Pos) &
+	     CCM_MODE_MODE_Msk);
 	NRF_CCM->CNFPTR = (uint32_t)ccm;
 	NRF_CCM->INPTR = (uint32_t)_pkt_scratch;
 	NRF_CCM->OUTPTR = (uint32_t)pkt;
@@ -453,10 +457,12 @@ void *radio_ccm_tx_pkt_set(struct ccm *ccm, void *pkt)
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Disabled;
 	NRF_CCM->ENABLE = CCM_ENABLE_ENABLE_Enabled;
 	NRF_CCM->MODE =
-	    ((CCM_MODE_MODE_Encryption << CCM_MODE_MODE_Pos) &
-	     CCM_MODE_MODE_Msk) |
+#if !defined(CONFIG_SOC_SERIES_NRF51X)
 	    ((CCM_MODE_LENGTH_Extended << CCM_MODE_LENGTH_Pos) &
-	       CCM_MODE_LENGTH_Msk);
+	       CCM_MODE_LENGTH_Msk) |
+#endif
+	    ((CCM_MODE_MODE_Encryption << CCM_MODE_MODE_Pos) &
+	     CCM_MODE_MODE_Msk);
 	NRF_CCM->CNFPTR = (uint32_t)ccm;
 	NRF_CCM->INPTR = (uint32_t)pkt;
 	NRF_CCM->OUTPTR = (uint32_t)_pkt_scratch;

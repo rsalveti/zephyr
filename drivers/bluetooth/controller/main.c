@@ -55,6 +55,22 @@
 #define HCI_SCO		0x03
 #define HCI_EVT		0x04
 
+#if defined(CONFIG_SOC_SERIES_NRF51X)
+#define NRF5_IRQ_POWER_CLOCK_IRQn	NRF51_IRQ_POWER_CLOCK_IRQn
+#define NRF5_IRQ_RADIO_IRQn		NRF51_IRQ_RADIO_IRQn
+#define NRF5_IRQ_RTC0_IRQn		NRF51_IRQ_RTC0_IRQn
+#define NRF5_IRQ_RNG_IRQn		NRF51_IRQ_RNG_IRQn
+#define NRF5_IRQ_SWI4_IRQn		NRF51_IRQ_SWI4_IRQn
+#define NRF5_IRQ_SWI5_IRQn		NRF51_IRQ_SWI5_IRQn
+#else /* NRF52 */
+#define NRF5_IRQ_POWER_CLOCK_IRQn	NRF52_IRQ_POWER_CLOCK_IRQn
+#define NRF5_IRQ_RADIO_IRQn		NRF52_IRQ_RADIO_IRQn
+#define NRF5_IRQ_RTC0_IRQn		NRF52_IRQ_RTC0_IRQn
+#define NRF5_IRQ_RNG_IRQn		NRF52_IRQ_RNG_IRQn
+#define NRF5_IRQ_SWI4_IRQn		NRF52_IRQ_SWI4_EGU4_IRQn
+#define NRF5_IRQ_SWI5_IRQn		NRF52_IRQ_SWI5_EGU5_IRQn
+#endif
+
 static uint8_t ALIGNED(4) _rand_context[3 + 4 + 1];
 static uint8_t ALIGNED(4) _ticker_nodes[RADIO_TICKER_NODES][TICKER_NODE_T_SIZE];
 static uint8_t ALIGNED(4) _ticker_users[RADIO_TICKER_USERS][TICKER_USER_T_SIZE];
@@ -116,12 +132,12 @@ static void rng_nrf5_isr(void *arg)
 
 static void swi4_nrf5_isr(void *arg)
 {
-	work_run(NRF52_IRQ_SWI4_EGU4_IRQn);
+	work_run(NRF5_IRQ_SWI4_IRQn);
 }
 
 static void swi5_nrf5_isr(void *arg)
 {
-	work_run(NRF52_IRQ_SWI5_EGU5_IRQn);
+	work_run(NRF5_IRQ_SWI5_IRQn);
 }
 
 static struct net_buf *native_evt_recv(uint8_t *remaining, uint8_t **in)
@@ -353,18 +369,18 @@ static int native_open(void)
 		return -ENOMEM;
 	}
 
-	IRQ_CONNECT(NRF52_IRQ_POWER_CLOCK_IRQn, 2, power_clock_nrf5_isr, 0, 0);
-	IRQ_CONNECT(NRF52_IRQ_RADIO_IRQn, 0, radio_nrf5_isr, 0, 0);
-	IRQ_CONNECT(NRF52_IRQ_RTC0_IRQn, 0, rtc0_nrf5_isr, 0, 0);
-	IRQ_CONNECT(NRF52_IRQ_RNG_IRQn, 2, rng_nrf5_isr, 0, 0);
-	IRQ_CONNECT(NRF52_IRQ_SWI4_EGU4_IRQn, 0, swi4_nrf5_isr, 0, 0);
-	IRQ_CONNECT(NRF52_IRQ_SWI5_EGU5_IRQn, 2, swi5_nrf5_isr, 0, 0);
-	irq_enable(NRF52_IRQ_POWER_CLOCK_IRQn);
-	irq_enable(NRF52_IRQ_RADIO_IRQn);
-	irq_enable(NRF52_IRQ_RTC0_IRQn);
-	irq_enable(NRF52_IRQ_RNG_IRQn);
-	irq_enable(NRF52_IRQ_SWI4_EGU4_IRQn);
-	irq_enable(NRF52_IRQ_SWI5_EGU5_IRQn);
+	IRQ_CONNECT(NRF5_IRQ_POWER_CLOCK_IRQn, 2, power_clock_nrf5_isr, 0, 0);
+	IRQ_CONNECT(NRF5_IRQ_RADIO_IRQn, 0, radio_nrf5_isr, 0, 0);
+	IRQ_CONNECT(NRF5_IRQ_RTC0_IRQn, 0, rtc0_nrf5_isr, 0, 0);
+	IRQ_CONNECT(NRF5_IRQ_RNG_IRQn, 2, rng_nrf5_isr, 0, 0);
+	IRQ_CONNECT(NRF5_IRQ_SWI4_IRQn, 0, swi4_nrf5_isr, 0, 0);
+	IRQ_CONNECT(NRF5_IRQ_SWI5_IRQn, 2, swi5_nrf5_isr, 0, 0);
+	irq_enable(NRF5_IRQ_POWER_CLOCK_IRQn);
+	irq_enable(NRF5_IRQ_RADIO_IRQn);
+	irq_enable(NRF5_IRQ_RTC0_IRQn);
+	irq_enable(NRF5_IRQ_RNG_IRQn);
+	irq_enable(NRF5_IRQ_SWI4_IRQn);
+	irq_enable(NRF5_IRQ_SWI5_IRQn);
 
 	nano_sem_init(&nano_sem_native_recv);
 	fiber_start(native_recv_fiber_stack, sizeof(native_recv_fiber_stack),
