@@ -24,7 +24,7 @@
 #include "ccm.h"
 #include "radio.h"
 
-#if defined(NRF51)
+#if defined(CONFIG_SOC_SERIES_NRF51X)
 #define RADIO_PDU_LEN_MAX (BIT(5) - 1)
 #elif defined(NRF52)
 #define RADIO_PDU_LEN_MAX (BIT(8) - 1)
@@ -109,7 +109,7 @@ void radio_aa_set(uint8_t *aa)
 
 void radio_pkt_configure(uint8_t preamble16, uint8_t bits_len, uint8_t max_len)
 {
-#if defined(NRF51)
+#if defined(CONFIG_SOC_SERIES_NRF51X)
 	if (bits_len == 8) {
 		bits_len = 5;
 	}
@@ -466,7 +466,7 @@ void *radio_ccm_tx_pkt_set(struct ccm *ccm, void *pkt)
 	NRF_CCM->EVENTS_ENDCRYPT = 0;
 	NRF_CCM->EVENTS_ERROR = 0;
 
-#if NRF51
+#if defined(CONFIG_SOC_SERIES_NRF51X)
 	/* set up PPI to enable CCM */
 	NRF_PPI->CH[6].EEP = (uint32_t)&(NRF_RADIO->EVENTS_READY);
 	NRF_PPI->CH[6].TEP = (uint32_t)&(NRF_CCM->TASKS_KSGEN);
