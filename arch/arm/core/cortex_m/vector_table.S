@@ -73,4 +73,8 @@ SECTION_SUBSEC_FUNC(exc_vector_table,_vector_table_section,__start)
 #endif
     .word __reserved
     .word __pendsv
+#if defined(CORTEX_M_SYSTICK)
     .word _timer_int_handler
+#else
+    .word __reserved
+#endif

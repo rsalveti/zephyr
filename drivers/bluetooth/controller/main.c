@@ -382,6 +382,10 @@ static int native_open(void)
 	irq_enable(NRF5_IRQ_SWI4_IRQn);
 	irq_enable(NRF5_IRQ_SWI5_IRQn);
 
+	/* irq_enable clears pending IRQ, but ticker_timer may have pended
+	 * its instance's IRQ, hence try pending it, there is no harm. */
+	ticker_job_sched(1);
+
 	nano_sem_init(&nano_sem_native_recv);
 	fiber_start(native_recv_fiber_stack, sizeof(native_recv_fiber_stack),
 		    (nano_fiber_entry_t)native_recv_fiber, 0, 0, 7, 0);

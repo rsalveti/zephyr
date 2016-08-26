@@ -22,9 +22,12 @@ config SOC
 	string
 	default nRF52832
 
+config CORTEX_M_SYSTICK
+	default n
+
 config SYS_CLOCK_HW_CYCLES_PER_SEC
 	int
-	default 64000000
+	default 32768
 
 config SRAM_SIZE
 	default 64
