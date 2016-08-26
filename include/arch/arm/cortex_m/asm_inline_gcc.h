@@ -119,12 +119,21 @@ static ALWAYS_INLINE unsigned int find_lsb_set(uint32_t op)
  *
  * On Cortex-M3/M4, this function prevents exceptions of priority lower than
  * the two highest priorities from interrupting the CPU.
+ *
+ * On Cortex-M0/M0+, this function reads the value of PRIMASK which shows
+ * if interrups are enabled, then disables all interrupts except NMI.
+ *
  */
 
 static ALWAYS_INLINE unsigned int _arch_irq_lock(void)
 {
 	unsigned int key;
 
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+	__asm__ volatile("mrs %0, PRIMASK;\n\t"
+		"cpsid i;\n\t"
+		: "=r" (key));
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
 	__asm__ volatile(
 		"movs.n %%r1, %1;\n\t"
 		"mrs %0, BASEPRI;\n\t"
@@ -132,6 +141,7 @@ static ALWAYS_INLINE unsigned int _arch_irq_lock(void)
 		: "=r"(key)
 		: "i"(_EXC_IRQ_DEFAULT_PRIO)
 		: "r1");
+#endif
 
 	return key;
 }
@@ -150,11 +160,21 @@ static ALWAYS_INLINE unsigned int _arch_irq_lock(void)
  * @param key architecture-dependent lock-out key
  *
  * @return N/A
+ *
+ * On Cortex-M0/M0+, this enables all interrupts if they were not
+ * previously disabled.
  */
 
 static ALWAYS_INLINE void _arch_irq_unlock(unsigned int key)
 {
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+	if (key != 0) {
+		return;
+	}
+	__asm__ volatile("cpsie i;\n\t");
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
 	__asm__ volatile("msr BASEPRI, %0;\n\t" :  : "r"(key));
+#endif
 }
 
 

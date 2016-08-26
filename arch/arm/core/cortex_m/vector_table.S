@@ -48,6 +48,15 @@ SECTION_SUBSEC_FUNC(exc_vector_table,_vector_table_section,__start)
     .word __nmi
 
     .word __hard_fault
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    .word __reserved
+    .word __reserved
+    .word __reserved
+    .word __reserved
+    .word __reserved
+    .word __reserved
+    .word __reserved
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     .word __mpu_fault
     .word __bus_fault
     .word __usage_fault
@@ -55,8 +64,13 @@ SECTION_SUBSEC_FUNC(exc_vector_table,_vector_table_section,__start)
     .word __reserved
     .word __reserved
     .word __reserved
+#endif
     .word __svc
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    .word __reserved
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     .word __debug_monitor
+#endif
     .word __reserved
     .word __pendsv
     .word _timer_int_handler

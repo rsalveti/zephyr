@@ -79,7 +79,23 @@ SECTION_FUNC(TEXT, __pendsv)
 
     /* save callee-saved + psp in TCS */
     mrs ip, PSP
+
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    /* Store current r4-r7 */
+    stmea r0!, {r4-r7}
+    /* copy r8-r12 into r3-r7 */
+    mov r3, r8
+    mov r4, r9
+    mov r5, r10
+    mov r6, r11
+    mov r7, ip
+    /* store r8-12 */
+    stmea r0!, {r3-r7}
+    /* restore r0 */
+    mov r0, r2
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     stmia r0, {v1-v8, ip}
+#endif
 
 #ifdef CONFIG_FP_SHARING
     add r0, r2, #__tTCS_preemp_float_regs_OFFSET
@@ -98,8 +114,12 @@ SECTION_FUNC(TEXT, __pendsv)
     ldr r3, =_SCS_ICSR_UNPENDSV
 
     /* protect the kernel state while we play with the thread lists */
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    cpsid i
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     movs.n r0, #_EXC_IRQ_DEFAULT_PRIO
     msr BASEPRI, r0
+#endif
 
     /* find out incoming thread (fiber or task) */
 
@@ -111,10 +131,22 @@ SECTION_FUNC(TEXT, __pendsv)
      * if so, remove fiber from list
      * else, the task is the thread we're switching in
      */
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    /* branch over remove if eq otherwise we branch over switch */
+    beq switch_in_task
+    ldr r0, [r2, #__tTCS_link_OFFSET]   /* then */
+    str r0, [r1, #__tNANO_fiber_OFFSET] /* then */
+    bne endif
+BRANCH_LABEL(switch_in_task)
+    ldr r2, [r1, #__tNANO_task_OFFSET]  /* else */
+BRANCH_LABEL(endif)
+
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     itte ne
 	ldrne.w r0, [r2, #__tTCS_link_OFFSET]   /* then */
 	strne.w r0, [r1, #__tNANO_fiber_OFFSET] /* then */
 	ldreq.w r2, [r1, #__tNANO_task_OFFSET]  /* else */
+#endif
 
     /* r2 contains the new thread */
     ldr r0, [r2, #__tTCS_flags_OFFSET]
@@ -134,11 +166,15 @@ SECTION_FUNC(TEXT, __pendsv)
     mov r4, ip
     str r3, [r4, #0]
 
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    cpsie i
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     /* restore BASEPRI for the incoming thread */
     ldr r0, [r2, #__tTCS_basepri_OFFSET]
     mov ip, #0
     str ip, [r2, #__tTCS_basepri_OFFSET]
     msr BASEPRI, r0
+#endif
 
 #ifdef CONFIG_FP_SHARING
     add r0, r2, #__tTCS_preemp_float_regs_OFFSET
@@ -146,8 +182,28 @@ SECTION_FUNC(TEXT, __pendsv)
 #endif
 
     /* load callee-saved + psp from TCS */
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    ldr r4, =__tTCS_preempReg_OFFSET
+    adds r0, r2, r4
+
+    /* restore r4-r12 for new thread */
+    /* first restore r8-r12 located after r4-r7 (4*4bytes) */
+    adds r0, #16
+    ldmia r0!, {r3-r7}
+    /* move to correct registers */
+    mov r8, r3
+    mov r9, r4
+    mov r10, r5
+    mov r11, r6
+    mov ip, r7
+    /* restore r4-r7, go back 9*4 bytes to the start of the stored block */
+    subs r0, #36
+    ldmia r0!, {r4-r7}
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     add r0, r2, #__tTCS_preempReg_OFFSET
     ldmia r0, {v1-v8, ip}
+#endif
+
     msr PSP, ip
 
     _GDB_STUB_EXC_EXIT
@@ -170,10 +226,23 @@ SECTION_FUNC(TEXT, __svc)
     _GDB_STUB_EXC_ENTRY
 
 #if CONFIG_IRQ_OFFLOAD
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    ldr r0, =0x4
+    mov r1, lr
+    tst r1, r0   /* did we come from thread mode ? */
+    beq irq_offload_handler_mode
+    mrs r0, PSP
+    bne irq_offload_endif
+BRANCH_LABEL(irq_offload_handler_mode)
+    mrs r0, MSP
+BRANCH_LABEL(irq_offload_endif)
+
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     tst lr, #0x4    /* did we come from thread mode ? */
     ite eq  /* if zero (equal), came from handler mode */
         mrseq r0, MSP   /* handler mode, stack frame is on MSP */
         mrsne r0, PSP   /* thread mode, stack frame is on PSP */
+#endif
 
     ldr r0, [r0, #24]   /* grab address of PC from stack frame */
     /* SVC is a two-byte instruction, point to it and read  encoding */
@@ -205,8 +274,12 @@ BRANCH_LABEL(_context_switch);
      * - in a SVC call, so protected against context switches
      * - allow PendSV, since it's running at prio 0xff
      */
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    cpsie i
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     eors.n r0, r0
     msr BASEPRI, r0
+#endif
 
      /* set PENDSV bit, pending the PendSV exception */
     ldr r1, =_SCS_ICSR
@@ -253,11 +326,21 @@ BRANCH_LABEL(_context_switch);
 
 SECTION_FUNC(TEXT, _Swap)
 
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+    cpsie i
+
+    ldr r1, =_SCS_ICSR
+    ldr r2, =_SCS_ICSR_PENDSV
+    str r2, [r1, #0]
+#endif
+
     ldr r1, =_nanokernel
     ldr r2, [r1, #__tNANO_current_OFFSET]
     str r0, [r2, #__tTCS_basepri_OFFSET]
 
+#if !defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
     svc #0
+#endif
 
     /* r0 contains the return value if needed */
     bx lr

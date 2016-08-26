@@ -73,6 +73,7 @@ static ALWAYS_INLINE void _ExcSetup(void)
 {
 	_ScbExcPrioSet(_EXC_PENDSV, _EXC_PRIO(0xff));
 	_ScbExcPrioSet(_EXC_SVC, _EXC_PRIO(0x01));
+#if !defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
 	_ScbExcPrioSet(_EXC_MPU_FAULT, _EXC_PRIO(0x01));
 	_ScbExcPrioSet(_EXC_BUS_FAULT, _EXC_PRIO(0x01));
 	_ScbExcPrioSet(_EXC_USAGE_FAULT, _EXC_PRIO(0x01));
@@ -80,6 +81,7 @@ static ALWAYS_INLINE void _ExcSetup(void)
 	_ScbUsageFaultEnable();
 	_ScbBusFaultEnable();
 	_ScbMemFaultEnable();
+#endif /* !CONFIG_CPU_CORTEX_M0_M0PLUS */
 }
 
 #endif /* _ASMLANGUAGE */

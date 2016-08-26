@@ -38,6 +38,20 @@ SECTION_FUNC(TEXT, _exc_wrapper)
 
 	_GDB_STUB_EXC_ENTRY
 
+#if defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
+	ldr r0, =0x4
+	mov r1, lr
+	tst r1, r0	/* did we come from thread mode ? */
+	beq irq_offload_handler_mode
+	mrs r0, PSP
+	bne irq_offload_endif
+BRANCH_LABEL(irq_offload_handler_mode)
+	mrs r0, MSP
+	ldr r1, =4
+	add r0, r1
+BRANCH_LABEL(irq_offload_endif)
+
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
 	ldr ip, =_SCS_ICSR
 	ldr ip, [ip]
 	ands.w ip, #_SCS_ICSR_RETTOBASE
@@ -49,6 +63,7 @@ SECTION_FUNC(TEXT, _exc_wrapper)
 					 * in_GDB_STUB_EXC_ENTRY */
 	mrsne r0, PSP	/* if not, we are returning to thread mode, thus this is
 					 * not a nested exception: the stack frame is on the PSP */
+#endif /* CONFIG_CPU_CORTEX_M0_M0PLUS */
 
 	/* r0 now contains the pointer to the full ESF */
 

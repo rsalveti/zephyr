@@ -81,7 +81,11 @@ _GdbStubEditReg:
     /* save callee-saved + psp in TCS */
     adds r1, #__tTCS_preempReg_OFFSET
     mrs ip, PSP
+#ifdef CONFIG_CPU_CORTEX_M0_M0PLUS
+    /* FIXME */
+#else /* CONFIG_CPU_CORTEX_M3_M4 */
     stmia r1, {v1-v8, ip}
+#endif
 
     bx lr
 
@@ -102,12 +106,14 @@ _GdbStubEditReg:
 
 SECTION_FUNC(TEXT, _GdbStubExcExit)
 
+#if !defined(CONFIG_CPU_CORTEX_M0_M0PLUS)
     /* if we're nested (ie. !RETTOBASE), do not reset EXC_ACTIVE */
     ldr r1, =_SCS_ICSR
     ldr r1, [r1]
     ands r1, #_SCS_ICSR_RETTOBASE
     it eq
 	bxeq lr
+#endif
 
     ldr r1, =_nanokernel
     ldr r2, [r1, #__tNANO_flags_OFFSET]
