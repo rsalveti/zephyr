@@ -18,6 +18,11 @@
  * @file dynamic exception handler wrapper
  */
 
+/* can only be used with non-XIP kernels, since they don't have their vector
+ * table in the FLASH
+ */
+#if !defined(CONFIG_XIP)
+
 #define _ASMLANGUAGE
 
 #include <toolchain.h>
@@ -62,3 +67,5 @@ SECTION_FUNC(TEXT, _exc_wrapper)
 	b _ExcExit
 
 	.end
+
+#endif /* CONFIG_XIP */
