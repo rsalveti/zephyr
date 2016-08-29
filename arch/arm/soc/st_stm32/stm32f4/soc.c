@@ -42,10 +42,12 @@ static int st_stm32f4_init(struct device *arg)
 
 	key = irq_lock();
 
+	#if !defined(CONFIG_XIP_ISR_RAM_RELOCATE)
 	/* Setup the vector table offset register (VTOR),
 	 * which is located at the beginning of flash area.
 	 */
 	_scs_relocate_vector_table((void *)CONFIG_FLASH_BASE_ADDRESS);
+	#endif
 
 	/* Clear all faults */
 	_ScbMemFaultAllFaultsReset();

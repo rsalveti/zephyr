@@ -82,11 +82,13 @@ SECTIONS
 
     SECTION_PROLOGUE(_TEXT_SECTION_NAME,,)
 	{
+	__isr_vector_start = .;
 	KEEP(*(.exc_vector_table))
 	KEEP(*(".exc_vector_table.*"))
 
 	KEEP(*(.irq_vector_table))
 	KEEP(*(".irq_vector_table.*"))
+	__isr_vector_end = .;
 
 	/* FRDM_K64F has to write 16 bytes at 0x400 */
 	SKIP_TO_SECURITY_FRDM_K64F
@@ -159,6 +161,15 @@ SECTIONS
 
     GROUP_START(RAMABLE_REGION)
 
+#if defined(CONFIG_XIP_ISR_RAM_RELOCATE)
+    SECTION_PROLOGUE(isr_vector_relocate,,)
+	{
+	. = ALIGN(4);
+	__isr_vector_tbl_reloc = .;
+	. = . + (__isr_vector_end - __isr_vector_start);
+	. = ALIGN(4);
+	} GROUP_LINK_IN(RAMABLE_REGION)
+#endif
     SECTION_DATA_PROLOGUE(_DATA_SECTION_NAME,,)
 	{
 	_image_ram_start = .;

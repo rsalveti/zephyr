@@ -33,7 +33,24 @@
 #include <nano_internal.h>
 
 #ifdef CONFIG_XIP
-static inline void relocate_vector_table(void) { /* do nothing */ }
+static inline void relocate_vector_table(void)
+{
+#ifdef CONFIG_XIP_ISR_RAM_RELOCATE
+	extern char __isr_vector_start[];
+	extern char __isr_vector_tbl_reloc[];
+	uint32_t *isr_rom, *isr_ram;
+	int i;
+
+	isr_rom = (uint32_t *)&__isr_vector_start;
+	isr_ram = (uint32_t *)&__isr_vector_tbl_reloc;
+
+	for (i = 0; i < (_NUM_EXC + CONFIG_NUM_IRQS); i++) {
+		isr_ram[i] = isr_rom[i];
+	}
+
+	_scs_relocate_vector_table((void *)&__isr_vector_tbl_reloc);
+#endif
+}
 #else
 static inline void relocate_vector_table(void)
 {
