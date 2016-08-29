@@ -63,10 +63,12 @@ static int nordicsemi_nrf52_init(struct device *arg)
 
 	key = irq_lock();
 
+	#if !defined(CONFIG_XIP_ISR_RAM_RELOCATE)
 	/* Setup the vector table offset register (VTOR),
 	* which is located at the beginning of flash area.
 	*/
 	_scs_relocate_vector_table((void *)CONFIG_FLASH_BASE_ADDRESS);
+	#endif
 
 	/* Workaround for FTPAN-32 "DIF: Debug session automatically
 	* enables TracePort pins" found at Product Anomaly document
