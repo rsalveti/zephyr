@@ -44,7 +44,7 @@ static int _nop_char_out(int c)
 	return 0;
 }
 
-static int (*_char_out)(int) = _nop_char_out;
+int (*_char_out)(int) = _nop_char_out;
 
 
 /**
@@ -85,6 +85,11 @@ static inline void _vprintk(const char *fmt, va_list ap)
 			}
 		} else {
 			switch (*fmt) {
+			case 'z':
+			case 'l':
+			case 'h':
+				/* FIXME: do nothing for these modifiers */
+				goto still_might_format;
 			case 'd':
 			case 'i': {
 				long d = va_arg(ap, long);
@@ -102,9 +107,12 @@ static inline void _vprintk(const char *fmt, va_list ap)
 				_printk_dec_ulong(u);
 				break;
 			}
+			case 'p':
+				  _char_out('0');
+				  _char_out('x');
+				  /* Fall through */
 			case 'x':
-			case 'X':
-			case 'p': {
+			case 'X': {
 				unsigned long x = va_arg(
 					ap, unsigned long);
 				_printk_hex_ulong(x);
@@ -134,7 +142,7 @@ static inline void _vprintk(const char *fmt, va_list ap)
 			}
 			might_format = 0;
 		}
-
+still_might_format:
 		++fmt;
 	}
 }
