@@ -12,6 +12,8 @@ static uint8_t ALIGNED(4) _ticker_nodes[1][TICKER_NODE_T_SIZE];
 static uint8_t ALIGNED(4) _ticker_users[1][TICKER_USER_T_SIZE];
 static uint8_t ALIGNED(4) _ticker_user_ops[2][TICKER_USER_OP_T_SIZE];
 
+static uint32_t clock_accumulated_count;
+
 void ticker_timeout(uint32_t ticks_at_expire, uint32_t remainder, uint16_t lazy,
 		    void *context)
 {
@@ -19,6 +21,8 @@ void ticker_timeout(uint32_t ticks_at_expire, uint32_t remainder, uint16_t lazy,
 	ARG_UNUSED(remainder);
 	ARG_UNUSED(lazy);
 	ARG_UNUSED(context);
+
+	clock_accumulated_count += sys_clock_hw_cycles_per_tick;
 
 	_sys_clock_tick_announce();
 }
@@ -56,4 +60,9 @@ int _sys_clock_driver_init(struct device *device)
 	}
 
 	return retval;
+}
+
+uint32_t sys_cycle_get_32(void)
+{
+	return clock_accumulated_count;
 }
