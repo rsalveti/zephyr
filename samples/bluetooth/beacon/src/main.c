@@ -24,7 +24,7 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
 
-#define DEVICE_NAME "Test beacon"
+#define DEVICE_NAME "96boards Test beacon"
 #define DEVICE_NAME_LEN (sizeof(DEVICE_NAME) - 1)
 
 /*
@@ -40,8 +40,7 @@ static const struct bt_data ad[] = {
 		      0x10, /* Eddystone-URL frame type */
 		      0x00, /* Calibrated Tx power at 0m */
 		      0x00, /* URL Scheme Prefix http://www. */
-		      'z', 'e', 'p', 'h', 'y', 'r',
-		      'p', 'r', 'o', 'j', 'e', 'c', 't',
+		      '9', '6', 'b', 'o', 'a', 'r', 'd', 's',
 		      0x08) /* .org */
 };
 
