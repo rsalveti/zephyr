@@ -1,5 +1,6 @@
 From: Amit Kucheria <amit.kucheria@linaro.org>
-Subject: pinmux: nucleo_f401re: Setup SPI pins on the board
+Subject: pinmux: 96b_carbon: Setup SPI pins on the board
 
-Change-Id: Id2febfa4eac9fd9cc611f43919d2ff2c0c4b4e65
+Change-Id: I739887d34f5eadb5475204b2b00130159de14347
 Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
