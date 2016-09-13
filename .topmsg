@@ -1,15 +1,8 @@
-From: Michael Scott <michael.scott@linaro.org>
-Subject: net/mqtt: return error codes from net_context_send
+From: Amit Kucheria <amit.kucheria@linaro.org>
+Subject: pinmux: stm32f4: Setup SPI pins
 
-Instead of returning EIO let's bubble the error from net_context_send
-back up to the caller in the following functions:
-mqtt_tx_connect()
-mqtt_tx_disconnect()
-mqtt_tx_pub_msgs()
-mqtt_tx_publish()
-mqtt_tx_pingreq()
-mqtt_tx_subscribe()
-mqtt_tx_unsubscribe()
+Expose SPI pins that are available through alternate function 5
 
-Change-Id: I9bb4396b227b8902ac1195a97bc37eb1959b643e
-Signed-off-by: Michael Scott <michael.scott@linaro.org>
+Change-Id: I11b9d6ea6087979e473895ed623446edfffbc71a
+Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
