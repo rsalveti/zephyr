@@ -1,8 +1,5 @@
 From: Amit Kucheria <amit.kucheria@linaro.org>
-Subject: pinmux: stm32f4: Setup SPI pins
+Subject: pinmux: nucleo_f401re: Setup SPI pins on the board
 
-Expose SPI pins that are available through alternate function 5
-
-Change-Id: I11b9d6ea6087979e473895ed623446edfffbc71a
+Change-Id: Id2febfa4eac9fd9cc611f43919d2ff2c0c4b4e65
 Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
-Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
