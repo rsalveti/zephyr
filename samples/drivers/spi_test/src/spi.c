@@ -97,27 +97,19 @@
 	#define FRAME_FMT SPI_STM32_FRAME_TI
 #endif
 
-//unsigned char m_wbuf1[] = "Hello, Carbon";
-//unsigned char s_wbuf1[] = "Hello, Nucleo";
+unsigned char m_wbuf1[] = "Hello, nRF5x";
+unsigned char s_wbuf1[] = "Hello, STM32F4";
 //unsigned char m_wbuf2[] = "How do you do?";
 //unsigned char s_wbuf2[] = "I'm fine, thank you";
-unsigned char m_wbuf1[] = "MMMMMM";
-unsigned char s_wbuf1[] = "SSSSSS";
-unsigned char rbuf[16]    = { [0 ... 15] = 0xFF };
+//unsigned char m_wbuf1[] = "MMMMMM";
+//unsigned char s_wbuf1[] = "SSSSSS";
+unsigned char m_rbuf[32]    = { [0 ... 31] = 0xFF };
+unsigned char s_rbuf[20]    = { [0 ... 19] = 0xFF };
 
-static void print_buf_hex(unsigned char *sent, unsigned char *recv, uint32_t len)
+static void print_buf_hex(unsigned char *tx, unsigned char *rx)
 {
-	uint32_t i;
-
-	printk("\t\tSent    -->     Received\n");
-	printk("\t\t--------------------\n");
-	for (i = 0; i < len; i++) {
-		printk("%u:\t0x%x [%c]\t--> [%c]\t0x%x\n", i, *sent, *sent, *recv, *recv);
-		sent++;
-		recv++;
-	}
-
-	SYS_LOG_DBG("\n");
+	printk("Tx: \"%s\"\n", tx);
+	printk("Rx: \"%s\"\n\n", rx);
 }
 
 struct spi_config spi_conf = {
@@ -186,15 +178,15 @@ void main(void)
 		SYS_LOG_DBG("Count: %i\n", i);
 		SYS_LOG_DBG("------------\n");
 
-		sz_r = sizeof(rbuf) / sizeof(rbuf[0]);
+		sz_r = ARRAY_SIZE(m_rbuf);
+		sz_w = ARRAY_SIZE(m_wbuf1);
 
-		sz_w = sizeof(m_wbuf1) / sizeof(m_wbuf1[0]);
 		SYS_LOG_INF("spi_transceive: Text: %s\n", m_wbuf1);
-		ret = spi_transceive(spi, m_wbuf1, sz_w, rbuf, sz_r);
+		ret = spi_transceive(spi, m_wbuf1, sz_w, m_rbuf, sz_r);
 		if (ret  < 0) {
 			SYS_LOG_ERR("Error in spi_transcieve: %i\n", ret);
 		}
-		print_buf_hex(m_wbuf1, rbuf, (sz_r > sz_w)? sz_r: sz_w);
+		print_buf_hex(m_wbuf1, m_rbuf);
 	}
 #elif CONFIG_SPI_SLAVE == 1
 	/* Slave */
@@ -205,15 +197,15 @@ void main(void)
 		SYS_LOG_DBG("Count: %i\n", i);
 		SYS_LOG_DBG("------------\n");
 
-		sz_r = sizeof(rbuf) /  sizeof(rbuf[0]);
+		sz_r = ARRAY_SIZE(s_rbuf);
+		sz_w = ARRAY_SIZE(s_wbuf1);
 
-		sz_w = sizeof(s_wbuf1) /  sizeof(s_wbuf1[0]);
 		SYS_LOG_INF("spi_transceive: Text: %s\n", s_wbuf1);
-		ret = spi_transceive(spi, s_wbuf1, sz_w, rbuf, sz_r);
+		ret = spi_transceive(spi, s_wbuf1, sz_w, s_rbuf, sz_r);
 		if (ret  < 0) {
 			SYS_LOG_ERR("Error in spi_transcieve: %i\n", ret);
 		}
-		print_buf_hex(s_wbuf1, rbuf, (sz_r > sz_w)? sz_r: sz_w);
+		print_buf_hex(s_wbuf1, s_rbuf);
 	}
 #endif /* CONFIG_SPI_SLAVE */
 }
