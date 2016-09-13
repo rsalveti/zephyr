@@ -84,15 +84,15 @@
 
 /* SPIS */
 /* The registers PSELSCK, PSELMISO, PSELMOSI, PSELCSN were restructured into a struct. */
-#define PSELSCK       PSEL.SCK
-#define PSELMISO      PSEL.MISO
-#define PSELMOSI      PSEL.MOSI
-#define PSELCSN       PSEL.CSN
+//#define PSELSCK       PSEL.SCK
+//#define PSELMISO      PSEL.MISO
+//#define PSELMOSI      PSEL.MOSI
+//#define PSELCSN       PSEL.CSN
 
 /* The registers RXDPTR, MAXRX, AMOUNTRX were restructured into a struct */
-#define RXDPTR        RXD.PTR
-#define MAXRX         RXD.MAXCNT
-#define AMOUNTRX      RXD.AMOUNT
+//#define RXDPTR        RXD.PTR
+//#define MAXRX         RXD.MAXCNT
+//#define AMOUNTRX      RXD.AMOUNT
 
 #define SPIS_MAXRX_MAXRX_Pos        SPIS_RXD_MAXCNT_MAXCNT_Pos
 #define SPIS_MAXRX_MAXRX_Msk        SPIS_RXD_MAXCNT_MAXCNT_Msk
@@ -101,9 +101,9 @@
 #define SPIS_AMOUNTRX_AMOUNTRX_Msk  SPIS_RXD_AMOUNT_AMOUNT_Msk
 
 /* The registers TXDPTR, MAXTX, AMOUNTTX were restructured into a struct */
-#define TXDPTR        TXD.PTR
-#define MAXTX         TXD.MAXCNT
-#define AMOUNTTX      TXD.AMOUNT
+//#define TXDPTR        TXD.PTR
+//#define MAXTX         TXD.MAXCNT
+//#define AMOUNTTX      TXD.AMOUNT
 
 #define SPIS_MAXTX_MAXTX_Pos        SPIS_TXD_MAXCNT_MAXCNT_Pos
 #define SPIS_MAXTX_MAXTX_Msk        SPIS_TXD_MAXCNT_MAXCNT_Msk
