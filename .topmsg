@@ -1,6 +1,9 @@
 From: Amit Kucheria <amit.kucheria@linaro.org>
-Subject: pinmux: 96b_carbon: Setup SPI pins on the board
+Subject: drivers: spi: Add STM32f4 SPI driver
 
-Change-Id: I739887d34f5eadb5475204b2b00130159de14347
+This driver is capable of Master and Slave mode, default being
+Master-mode. Slave mode requires CONFIG_SPI_SLAVE to be set.
+
+Change-Id: Idc35900ade22d92fc5d0fd5a799068dec1c9449f
 Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
