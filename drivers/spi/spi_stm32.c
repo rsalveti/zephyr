@@ -53,7 +53,7 @@ struct pending_transfer {
 static struct pending_transfer pending_transfers[4];
 
 /* TODO: Find something unprintable that isn't typically used? */
-static const uint32_t tx_padding = 0;
+static const uint32_t tx_padding = 0x55;
 
 static void spi_stm32_enable_irq(struct device *dev, uint16_t flags)
 {
@@ -376,7 +376,8 @@ static int spi_stm32_transceive(struct device *dev,
 	 * Enable interrupts:
 	 * - Transmit Buffer Empty (no more data to send)
 	 * - Receive Buffer Not empty (new data arrived)
-	 *
+	 * - Errors
+   *
 	 * Note: DMA requests are not yet supported.
    * TODO: Should we enable RX irq when no rx queue?
 	 */
@@ -404,7 +405,7 @@ static void spi_stm32_push_byte(struct device *dev)
 	struct spi_stm32_data *priv_data = DEV_DATA(dev);
 	uint8_t data;
 
-	if (priv_data->tx_buf) {
+	if (priv_data->transmitted < priv_data->tx_buf_len) {
 		data = *(uint8_t *)(priv_data->tx_buf);
 		priv_data->tx_buf++;
 	} else {
@@ -424,7 +425,7 @@ static void spi_stm32_pull_byte(struct device *dev)
 
 	/* Read data from MOSI/MISO */
 	data = (uint8_t) spi_regs->dr;
-	if (priv_data->rx_buf) {
+	if (priv_data->received < priv_data->rx_buf_len) {
 		*(uint8_t *)(priv_data->rx_buf) = data;
 		priv_data->rx_buf++;
 	} else {
@@ -509,10 +510,8 @@ static void spi_stm32_complete(struct device *dev, uint32_t error)
 	/* Disable transfer operations */
 	spi_stm32_stop(dev);
 
-	SYS_LOG_DBG("Total bytes exchanged: Tx: %u, Rx: %u\n"
-		    "\t\t\t\tRemaining Buffers [Tx: %p, Rx: %p]\n",
-		    priv_data->transmitted, priv_data->received,
-		    priv_data->tx_buf, priv_data->rx_buf);
+	printk("Total: Tx [%u], Rx [%u] bytes\n",
+		priv_data->transmitted, priv_data->received);
 
 	if (error) {
 		SYS_LOG_DBG("Transaction aborted due to error!\n");
