@@ -16,22 +16,22 @@
  *
  */
 
+#define SYS_LOG_LEVEL SYS_LOG_SPI_LEVEL
+
 #include <nanokernel.h>
 #include <device.h>
 #include <errno.h>
 
 #include <gpio/gpio_nrf5.h>
-
-#define SYS_LOG_LEVEL SYS_LOG_SPI_LEVEL
 #include <misc/sys_log.h>
 #include <sys_io.h>
 #include <board.h>
 #include <init.h>
 #include <gpio.h>
+#include <spi.h>
 
 #include "spi_nrf5_priv.h"
 #include <spi/spi_nrf5.h>
-#include <spi.h>
 
 #define DEV_CFG(dev)	((struct spi_nrf5_config * const)(dev)->config->config_info)
 #define SPI_REGS(dev)	((volatile struct spi_slave_nrf5 *)(DEV_CFG(dev))->base_addr)
@@ -39,7 +39,7 @@
 
 static void spis_nrf5_print_cfg_registers(struct device *dev)
 {
-	volatile struct spi_slave_nrf5 *regs = SPI_REGS(dev);
+	volatile __attribute__((__unused__)) struct spi_slave_nrf5 *regs = SPI_REGS(dev);
 
 	SYS_LOG_DBG("\n"
 		"SHORTS: %x, IRQ: %x, SEMSTAT: %x\n"
@@ -132,7 +132,7 @@ static int spis_nrf5_transceive(struct device *dev, const void *tx_buf,
 	volatile struct spi_slave_nrf5 *spi_regs = SPI_REGS(dev);
 	struct spi_nrf5_data *priv_data = DEV_DATA(dev);
 
-	__ASSERT(!((tx_buf_len && (tx_buf == NULL)) || (rx_buf_len && (rx_buf == NULL))),
+	__ASSERT(!(tx_buf_len && !tx_buf  || rx_buf_len && !rx_buf),
 		"spi_nrf5_transceive: ERROR - NULL buffers");
 
 	/* Set buffers info */
@@ -178,7 +178,7 @@ static int spis_nrf5_transceive(struct device *dev, const void *tx_buf,
  */
 static void spis_nrf5_complete(struct device *dev, uint32_t error)
 {
-	volatile struct spi_slave_nrf5 *spi_regs = SPI_REGS(dev);
+	volatile __attribute__((__unused__)) struct spi_slave_nrf5 *spi_regs = SPI_REGS(dev);
 	struct spi_nrf5_data *priv_data = DEV_DATA(dev);
 
 	SYS_LOG_DBG("bytes transferred: TX: %u, RX: %u [%s]",
