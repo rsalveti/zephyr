@@ -1,8 +1,6 @@
-From: Michael Scott <michael.scott@linaro.org>
-Subject: drivers: spi: fix location of syslog.h
+From: Amit Kucheria <amit.kucheria@linaro.org>
+Subject: defconfig: nucleo_f401re: Enable the SPI driver by default
 
-syslog.h header was moved to logging dir in commit
-a9e879e27352600ddfca3081708574a5f547bd45.
-
-Change-Id: If3bd71818ac8878107e88be1f09598bf6b948ab0
-Signed-off-by: Michael Scott <michael.scott@linaro.org>
+Change-Id: I8554d0b39af3b4e01495d687a35cd6c143fbd9c7
+Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
