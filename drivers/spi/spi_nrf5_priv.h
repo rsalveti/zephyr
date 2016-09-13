@@ -22,63 +22,63 @@
 typedef void (*spi_nrf5_config_t)(void);
 
 struct spi_nrf5_config {
-  uint32_t base_addr;             /* base address of SPI module registers */
-  spi_nrf5_config_t config_func;  /* IRQ configuration function pointer */
+	uint32_t base_addr;		/* base address of SPI module registers */
+	spi_nrf5_config_t config_func;	/* IRQ configuration function pointer */
 };
 
 struct spi_nrf5_data {
-  device_sync_call_t sync;   /* synchronisationn */
-  uint8_t frame_sz;          /* frame/word size, in bits */
-  const uint8_t *tx_buf;
-  uint8_t *rx_buf;
-  uint8_t tx_buf_len;
-  uint8_t rx_buf_len;
-  uint8_t trans_len;
-  uint32_t transmitted;
-  uint32_t received;
-  uint8_t error;
+	device_sync_call_t sync;   /* synchronisationn */
+	uint8_t frame_sz;	   /* frame/word size, in bits */
+	const uint8_t *tx_buf;
+	uint8_t *rx_buf;
+	uint8_t tx_buf_len;
+	uint8_t rx_buf_len;
+	uint8_t trans_len;
+	uint32_t transmitted;
+	uint32_t received;
+	uint8_t error;
 };
 
 struct spi_slave_nrf5 {
-  uint32_t  RESERVED0[9];
-  uint32_t  TASKS_ACQUIRE;   /* Acquire SPI semaphore */
-  uint32_t  TASKS_RELEASE;   /* Release SPI semaphore, enabling the SPI slave to acquire it */
-  uint32_t  RESERVED1[54];
-  uint32_t  EVENTS_END;      /* Granted transaction completed */
-  uint32_t  RESERVED2[2];
-  uint32_t  EVENTS_ENDRX;    /* End of RXD buffer reached */
-  uint32_t  RESERVED3[5];
-  uint32_t  EVENTS_ACQUIRED; /* Semaphore acquired */
-  uint32_t  RESERVED4[53];
-  uint32_t  SHORTS;          /* Shortcut register */
-  uint32_t  RESERVED5[64];
-  uint32_t  INTENSET;        /* Enable interrupt */
-  uint32_t  INTENCLR;        /* Disable interrupt */
-  uint32_t  RESERVED6[61];
-  uint32_t  SEMSTAT;         /* Semaphore status register */
-  uint32_t  RESERVED7[15];
-  uint32_t  STATUS;          /* Status from last transaction */
-  uint32_t  RESERVED8[47];
-  uint32_t  ENABLE;          /* Enable SPI slave */
-  uint32_t  RESERVED9;
-  uint32_t  PSELSCK;         /* Pin select for SCK */
-  uint32_t  PSELMISO;        /* Pin select for MISO signal  */
-  uint32_t  PSELMOSI;        /* Pin select for MOSI signal  */
-  uint32_t  PSELCSN;         /* Pin select for CSN signal*/
-  uint32_t  RESERVED10[7];
-  uint32_t  RXDPTR;          /* RXD data pointer */
-  uint32_t  RXDMAXCNT;       /* Maximum number of bytes in receive buffer  */
-  uint32_t  RXDAMOUNT;       /* Number of bytes received in last granted transaction */
-  uint32_t  RESERVED11;
-  uint32_t  TXDPTR;          /* TXD data pointer */
-  uint32_t  TXDMAXCNT;       /* Maximum number of bytes in transmit buffer */
-  uint32_t  TXDAMOUNT;       /* Number of bytes transmitted in last granted transaction */
-  uint32_t  RESERVED12;
-  uint32_t  CONFIG;          /* Configuration register */
-  uint32_t  RESERVED13;
-  uint32_t  DEF;             /* Default character - clocked out in case of an ignored transaction */
-  uint32_t  RESERVED14[24];
-  uint32_t  ORC;             /* Over-read character */
+	uint32_t  RESERVED0[9];
+	uint32_t  TASKS_ACQUIRE;   /* Acquire SPI semaphore */
+	uint32_t  TASKS_RELEASE;   /* Release SPI semaphore, enabling the SPI slave to acquire it */
+	uint32_t  RESERVED1[54];
+	uint32_t  EVENTS_END;	   /* Granted transaction completed */
+	uint32_t  RESERVED2[2];
+	uint32_t  EVENTS_ENDRX;	   /* End of RXD buffer reached */
+	uint32_t  RESERVED3[5];
+	uint32_t  EVENTS_ACQUIRED; /* Semaphore acquired */
+	uint32_t  RESERVED4[53];
+	uint32_t  SHORTS;	   /* Shortcut register */
+	uint32_t  RESERVED5[64];
+	uint32_t  INTENSET;	   /* Enable interrupt */
+	uint32_t  INTENCLR;	   /* Disable interrupt */
+	uint32_t  RESERVED6[61];
+	uint32_t  SEMSTAT;	   /* Semaphore status register */
+	uint32_t  RESERVED7[15];
+	uint32_t  STATUS;	   /* Status from last transaction */
+	uint32_t  RESERVED8[47];
+	uint32_t  ENABLE;	   /* Enable SPI slave */
+	uint32_t  RESERVED9;
+	uint32_t  PSELSCK;	   /* Pin select for SCK */
+	uint32_t  PSELMISO;	   /* Pin select for MISO signal  */
+	uint32_t  PSELMOSI;	   /* Pin select for MOSI signal  */
+	uint32_t  PSELCSN;	   /* Pin select for CSN signal*/
+	uint32_t  RESERVED10[7];
+	uint32_t  RXDPTR;	   /* RXD data pointer */
+	uint32_t  RXDMAXCNT;	   /* Maximum number of bytes in receive buffer  */
+	uint32_t  RXDAMOUNT;	   /* Number of bytes received in last granted transaction */
+	uint32_t  RESERVED11;
+	uint32_t  TXDPTR;	   /* TXD data pointer */
+	uint32_t  TXDMAXCNT;	   /* Maximum number of bytes in transmit buffer */
+	uint32_t  TXDAMOUNT;	   /* Number of bytes transmitted in last granted transaction */
+	uint32_t  RESERVED12;
+	uint32_t  CONFIG;	   /* Configuration register */
+	uint32_t  RESERVED13;
+	uint32_t  DEF;		   /* Default character - clocked out in case of an ignored transaction */
+	uint32_t  RESERVED14[24];
+	uint32_t  ORC;		   /* Over-read character */
 };
 
 /* Pin selection macros */
@@ -92,9 +92,9 @@ struct spi_slave_nrf5 {
 #define SPIS_NRF5_ENABLE 2
 
 #ifdef CONFIG_SOC_SERIES_NRF52X
-#define SPIM_NRF5_ENABLE SPIM_NRF52_ENABLE
+	#define SPIM_NRF5_ENABLE SPIM_NRF52_ENABLE
 #elif CONFIG_SOC_SERIES_NRF51X
-#define SPIM_NRF5_ENABLE SPIM_NRF51_ENABLE
+	#define SPIM_NRF5_ENABLE SPIM_NRF51_ENABLE
 #endif
 
 #define SEM_FREE 0
