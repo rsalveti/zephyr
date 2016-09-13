@@ -195,5 +195,6 @@ config SPI_2_CS_GPIO_PIN
 	default 0
 
 source "drivers/spi/Kconfig.dw"
+source "drivers/spi/Kconfig.nrf5"
 
 endif # SPI
