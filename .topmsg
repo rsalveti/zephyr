@@ -1,6 +1,6 @@
 From: Amit Kucheria <amit.kucheria@linaro.org>
-Subject: defconfig: nucleo_f401re: Enable the SPI driver by default
+Subject: defconfig: 96b_carbon: Enable the SPI driver by default
 
-Change-Id: I8554d0b39af3b4e01495d687a35cd6c143fbd9c7
+Change-Id: If9880d32424e812a2ce68698a458da03a7acdc42
 Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
