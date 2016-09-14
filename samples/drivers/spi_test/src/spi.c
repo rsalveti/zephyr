@@ -97,14 +97,25 @@
 	#define FRAME_FMT SPI_STM32_FRAME_TI
 #endif
 
-unsigned char m_wbuf1[] = "Hello, nRF5x";
-unsigned char s_wbuf1[] = "Hello, STM32F4";
-//unsigned char m_wbuf2[] = "How do you do?";
-//unsigned char s_wbuf2[] = "I'm fine, thank you";
-//unsigned char m_wbuf1[] = "MMMMMM";
-//unsigned char s_wbuf1[] = "SSSSSS";
-unsigned char m_rbuf[32]    = { [0 ... 31] = 0xFF };
-unsigned char s_rbuf[20]    = { [0 ... 19] = 0xFF };
+#define TOT_NUM 6
+#define DISP_NUM 2
+
+unsigned char rbuf[64]     = { [0 ... 63] = 0xFF };
+unsigned char *m_wbuf[TOT_NUM] = {"Hello, nRF5x",
+			      "How do you do?",
+			      "Doing good, just punting BLE packets your way",
+			      "....",
+			      ".. Oh. Didn't realise. Sorry!",
+			      "You could use your /REQ /RDY lines, you know"};
+unsigned char *s_wbuf[TOT_NUM] = {"Hello, STM32F4",
+			      "I'm fine, thank you. You?",
+			      "Yeah, I noticed",
+			      "Mind slowing down?",
+			      "That's OK.",
+			      "I didn't know, let me find out how"};
+
+//unsigned char m_rbuf[32]    = { [0 ... 31] = 0xFF };
+//unsigned char s_rbuf[20]    = { [0 ... 19] = 0xFF };
 
 static void print_buf_hex(unsigned char *tx, unsigned char *rx)
 {
@@ -116,17 +127,13 @@ struct spi_config spi_conf = {
 #ifdef CONFIG_SPI_STM32
 	//  .config = (FRAME_FMT | SET_FRAME_SIZE | OP_MODE | SPI_MODE_CPOL | SPI_MODE_CPHA),
 
-#ifdef CONFIG_SPI_SLAVE /* Nucleo */
+#ifdef CONFIG_SPI_SLAVE 
 	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_NO_OUTPUT ),
-	//  .config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_NO_OUTPUT | SPI_MODE_CPOL | SPI_MODE_CPHA ),
-#else /* MASTER */ /* Carbon */
+#else /* MASTER */ /* Carbon STM32F4 */
 	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_SS_OUTPUT),
-	//  .config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_SS_OUTPUT | SPI_MODE_CPOL | SPI_MODE_CPHA ),
-
 #endif /* CONFIG_SPI_SLAVE */
 
-#else /* Nitrogen */
-	//  .config = (SET_FRAME_SIZE | SPI_MODE_CPOL | SPI_MODE_CPHA | OP_MODE),
+#else /* nRF5x */
 	.config = (SET_FRAME_SIZE | OP_MODE),
 #endif
 	.max_sys_freq = SPI_MAX_CLK_FREQ_250KHZ,
@@ -152,7 +159,7 @@ void main(void)
 	uint32_t sz_w, sz_r;
 	int ret;
 
-	SYS_LOG_DBG("==== SPI Test Application ====\n");
+	printk("==== SPI Test Application ====\n");
 
 	spi = device_get_binding(SPI_DRV_NAME);
 	if (!spi) {
@@ -167,45 +174,39 @@ void main(void)
 
 #if CONFIG_SPI_SLAVE == 0
 	/* Master */
-	while (1) {
-		++i;
-
-		/* Stop after one iteration */
-		if (i > 1)
-			break;
-
+	for (i = 0; i < DISP_NUM; i++) {
 		SYS_LOG_DBG("------------\n");
 		SYS_LOG_DBG("Count: %i\n", i);
 		SYS_LOG_DBG("------------\n");
 
-		sz_r = ARRAY_SIZE(m_rbuf);
-		sz_w = ARRAY_SIZE(m_wbuf1);
+		sz_r = ARRAY_SIZE(rbuf);
+		sz_w = strlen(m_wbuf[i]) + 1;
 
-		SYS_LOG_INF("spi_transceive: Text: %s\n", m_wbuf1);
-		ret = spi_transceive(spi, m_wbuf1, sz_w, m_rbuf, sz_r);
+		SYS_LOG_INF("spi_transceive: Text [%s], Tx [%u], Rx [%u]\n",
+			    m_wbuf[i], sz_w, sz_r);
+		ret = spi_transceive(spi, m_wbuf[i], sz_w, rbuf, sz_r);
 		if (ret  < 0) {
 			SYS_LOG_ERR("Error in spi_transcieve: %i\n", ret);
 		}
-		print_buf_hex(m_wbuf1, m_rbuf);
+		print_buf_hex(m_wbuf[i], rbuf);
 	}
 #elif CONFIG_SPI_SLAVE == 1
 	/* Slave */
-	while (1) {
-		++i;
-
+	for (i = 0; i < DISP_NUM; i++) {
 		SYS_LOG_DBG("------------\n");
 		SYS_LOG_DBG("Count: %i\n", i);
 		SYS_LOG_DBG("------------\n");
 
-		sz_r = ARRAY_SIZE(s_rbuf);
-		sz_w = ARRAY_SIZE(s_wbuf1);
+		sz_r = ARRAY_SIZE(rbuf);
+		sz_w = strlen(s_wbuf[i]) + 1;
 
-		SYS_LOG_INF("spi_transceive: Text: %s\n", s_wbuf1);
-		ret = spi_transceive(spi, s_wbuf1, sz_w, s_rbuf, sz_r);
+		SYS_LOG_INF("spi_transceive: Text [%s], Tx [%u], Rx [%u]\n",
+			    s_wbuf[i], sz_w, sz_r);
+		ret = spi_transceive(spi, s_wbuf[i], sz_w, rbuf, sz_r);
 		if (ret  < 0) {
 			SYS_LOG_ERR("Error in spi_transcieve: %i\n", ret);
 		}
-		print_buf_hex(s_wbuf1, s_rbuf);
+		print_buf_hex(s_wbuf[i], rbuf);
 	}
 #endif /* CONFIG_SPI_SLAVE */
 }
