@@ -76,6 +76,8 @@
 		#define SPI_DRV_NAME CONFIG_SPI_0_NAME
 	#elif defined(CONFIG_BOARD_NRF51_BLENANO)
 		#define SPI_DRV_NAME CONFIG_SPI_0_NAME
+	#else
+		#define SPI_DRV_NAME CONFIG_SPI_0_NAME
 	#endif
 
 #endif
