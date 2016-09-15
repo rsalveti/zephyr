@@ -88,7 +88,7 @@ union __spi_cr1 {
 //#define SPI_BaudRatePrescaler_2         ((uint16_t)0x0000) //  42 MHz      21 MHZ
 //#define SPI_BaudRatePrescaler_4         ((uint16_t)0x0008) //  21 MHz      10.5 MHz
 //#define SPI_BaudRatePrescaler_8         ((uint16_t)0x0010) //  10.5 MHz    5.25 MHz
-//#define SPI_BaudRatePrescaler_16        ((uint16_t)0x0018) //  5.25 MHz    2.626 MHz  
+//#define SPI_BaudRatePrescaler_16        ((uint16_t)0x0018) //  5.25 MHz    2.626 MHz
 //#define SPI_BaudRatePrescaler_32        ((uint16_t)0x0020) //  2.626 MHz   1.3125 MHz
 //#define SPI_BaudRatePrescaler_64        ((uint16_t)0x0028) //  1.3125 MHz  656.25 KHz
 //#define SPI_BaudRatePrescaler_128       ((uint16_t)0x0030) //  656.25 KHz  328.125 KHz
@@ -218,7 +218,7 @@ struct spi_stm32_data {
 #define SPI_STM32_REG_CR1		(0x00)
 #define SPI_STM32_REG_CR2		(0x04)
 #define SPI_STM32_REG_SR		(0x08)
-#define SPI_STM32_REG_DR  		(0x0C)
+#define SPI_STM32_REG_DR		(0x0C)
 #define SPI_STM32_REG_CRCPR		(0x10)
 #define SPI_STM32_REG_RXCRCR		(0x14)
 #define SPI_STM32_REG_TXCRCR		(0x18)

@@ -210,7 +210,7 @@ void spis_nrf5_isr(void *arg)
 	 *      Allows start of a transceive where the buffers are "handed over"
 	 *      to the SPI module
 	 * 2. End of Granted SPI transaction:
-	 * 	So we can swap out buffers if needed
+	 *      So we can swap out buffers if needed
 	 */
 
 	/* NOTE:

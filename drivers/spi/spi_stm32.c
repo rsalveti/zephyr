@@ -377,9 +377,9 @@ static int spi_stm32_transceive(struct device *dev,
 	 * - Transmit Buffer Empty (no more data to send)
 	 * - Receive Buffer Not empty (new data arrived)
 	 * - Errors
-   *
+	 *
 	 * Note: DMA requests are not yet supported.
-   * TODO: Should we enable RX irq when no rx queue?
+	 * TODO: Should we enable RX irq when no rx queue?
 	 */
 	irqs = (SPI_STM32_CR2_ERRIE | SPI_STM32_CR2_RXNEIE | SPI_STM32_CR2_TXEIE);
 	spi_stm32_enable_irq(dev, irqs);
