@@ -320,7 +320,7 @@ int spis_nrf5_init(struct device *dev)
 #ifdef CONFIG_SOC_SERIES_NRF52X
 	#define NRF5_SPIS_0_IRQ NRF52_IRQ_SPIM0_SPIS0_TWIM0_TWIS0_SPI0_TWI0_IRQn
 #elif CONFIG_SOC_SERIES_NRF51X
-	#define NRF5_SPIS_0_IRQ NRF51_IRQ_SPI0_TWI0_IRQn
+	#define NRF5_SPIS_0_IRQ NRF51_IRQ_SPI1_TWI1_IRQn
 #endif
 
 void spis_config_0_irq(void);
