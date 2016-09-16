@@ -277,6 +277,9 @@ int spis_nrf5_init(struct device *dev)
 
 	SYS_LOG_DBG("SPI Slave driver init: %p", dev);
 
+	/* Enable constant latency for faster SPIS response */
+	NRF_POWER->TASKS_CONSTLAT = 1;
+
 	spi_regs->ENABLE = 0;
 
 	gpio_dev = device_get_binding(CONFIG_GPIO_NRF5_P0_DEV_NAME);
