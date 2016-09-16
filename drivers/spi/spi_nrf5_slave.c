@@ -37,6 +37,11 @@
 #define SPI_REGS(dev)	((volatile struct spi_slave_nrf5 *)(DEV_CFG(dev))->base_addr)
 #define DEV_DATA(dev)	((struct spi_nrf5_data * const)(dev)->driver_data)
 
+static inline bool is_buf_in_ram(const void *buf)
+{
+	return ((((uintptr_t) buf) & 0xE0000000) == 0x20000000);
+}
+
 static void spis_nrf5_print_cfg_registers(struct device *dev)
 {
 	volatile __attribute__((__unused__)) struct spi_slave_nrf5 *regs = SPI_REGS(dev);
@@ -134,6 +139,16 @@ static int spis_nrf5_transceive(struct device *dev, const void *tx_buf,
 
 	__ASSERT(!(tx_buf_len && !tx_buf  || rx_buf_len && !rx_buf),
 		"spi_nrf5_transceive: ERROR - NULL buffers");
+
+	/* Buffer needs to be in RAM for EasyDMA to work */
+	if (!tx_buf || !is_buf_in_ram(tx_buf)) {
+		SYS_LOG_ERR("Invalid TX buf %p\n", tx_buf);
+		return -EINVAL;
+	}
+	if (!rx_buf || !is_buf_in_ram(rx_buf)) {
+		SYS_LOG_ERR("Invalid RX buf %p\n", rx_buf);
+		return -EINVAL;
+	}
 
 	/* Set buffers info */
 	priv_data->tx_buf_len = tx_buf_len;
