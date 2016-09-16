@@ -103,6 +103,7 @@
 #define DISP_NUM 2
 
 unsigned char rbuf[64]     = { [0 ... 63] = 0xFF };
+unsigned char tbuf[64];
 unsigned char *m_wbuf[TOT_NUM] = {"Hello, nRF5x",
 			      "How do you do?",
 			      "Doing good, just punting BLE packets your way",
@@ -181,16 +182,20 @@ void main(void)
 		SYS_LOG_DBG("Count: %i\n", i);
 		SYS_LOG_DBG("------------\n");
 
+		memset(tbuf, 0, sizeof(tbuf));
+		strcpy(tbuf, m_wbuf[i]);
+
 		sz_r = ARRAY_SIZE(rbuf);
-		sz_w = strlen(m_wbuf[i]) + 1;
+		sz_w = strlen(tbuf) + 1;
+		tbuf[sz_w] = '\0';
 
 		SYS_LOG_INF("spi_transceive: Text [%s], Tx [%u], Rx [%u]\n",
-			    m_wbuf[i], sz_w, sz_r);
-		ret = spi_transceive(spi, m_wbuf[i], sz_w, rbuf, sz_r);
+			tbuf, sz_w, sz_r);
+		ret = spi_transceive(spi, tbuf, sz_w, rbuf, sz_r);
 		if (ret  < 0) {
 			SYS_LOG_ERR("Error in spi_transcieve: %i\n", ret);
 		}
-		print_buf_hex(m_wbuf[i], rbuf);
+		print_buf_hex(tbuf, rbuf);
 	}
 #elif CONFIG_SPI_SLAVE == 1
 	/* Slave */
@@ -199,16 +204,21 @@ void main(void)
 		SYS_LOG_DBG("Count: %i\n", i);
 		SYS_LOG_DBG("------------\n");
 
+		memset(tbuf, 0, sizeof(tbuf));
+		strcpy(tbuf, s_wbuf[i]);
+
 		sz_r = ARRAY_SIZE(rbuf);
-		sz_w = strlen(s_wbuf[i]) + 1;
+		sz_w = strlen(tbuf) + 1;
+		tbuf[sz_w] = '\0';
 
 		SYS_LOG_INF("spi_transceive: Text [%s], Tx [%u], Rx [%u]\n",
-			    s_wbuf[i], sz_w, sz_r);
-		ret = spi_transceive(spi, s_wbuf[i], sz_w, rbuf, sz_r);
+			tbuf, sz_w, sz_r);
+		ret = spi_transceive(spi, tbuf, sz_w, rbuf, sz_r);
 		if (ret  < 0) {
 			SYS_LOG_ERR("Error in spi_transcieve: %i\n", ret);
 		}
-		print_buf_hex(s_wbuf[i], rbuf);
+
+		print_buf_hex(tbuf, rbuf);
 	}
 #endif /* CONFIG_SPI_SLAVE */
 }
