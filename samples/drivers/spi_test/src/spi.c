@@ -56,7 +56,7 @@
 	#if defined(CONFIG_BOARD_NUCLEO_F401RE)
 		#define SPI_DRV_NAME CONFIG_SPI_0_NAME
 	#elif defined(CONFIG_BOARD_CARBON)
-		#define SPI_DRV_NAME CONFIG_SPI_1_NAME
+		#define SPI_DRV_NAME CONFIG_SPI_0_NAME
 	#endif
 
 #elif defined(CONFIG_SPI_K64)
