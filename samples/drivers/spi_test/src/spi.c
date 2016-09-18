@@ -100,7 +100,7 @@
 #endif
 
 #define TOT_NUM 6
-#define DISP_NUM 2
+#define DISP_NUM 6
 
 unsigned char rbuf[64]     = { [0 ... 63] = 0xFF };
 unsigned char tbuf[64];
