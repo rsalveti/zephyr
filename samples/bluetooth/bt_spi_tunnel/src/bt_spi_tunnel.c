@@ -107,12 +107,17 @@ static NET_BUF_POOL(acl_tx_pool, 2, BT_BUF_ACL_SIZE, &avail_acl_tx, NULL,
 /* TODO: Move to a proper place */
 /* Slave uses RDY and REQ pins to coordinate the messages with master */
 #define GPIO_DRV_NAME	CONFIG_GPIO_NRF5_P0_DEV_NAME
+#if defined(CONFIG_BOARD_NRF51_CARBON)
+#define GPIO_RDY_PIN	29
+#define GPIO_REQ_PIN	28
+#elif defined(CONFIG_BOARD_NRF51_PCA10028)
+#define GPIO_RDY_PIN	22
+#define GPIO_REQ_PIN	21
+#endif
 #define GPIO_RDY_DIR	GPIO_DIR_OUT
 #define GPIO_RDY_PULL	GPIO_PUD_PULL_DOWN
-#define GPIO_RDY_PIN	29
 #define GPIO_REQ_DIR	GPIO_DIR_OUT
 #define GPIO_REQ_PULL	GPIO_PUD_PULL_DOWN
-#define GPIO_REQ_PIN	28 /* Use 22 on PCA10028, avoid conflict with carbon */
 
 /* 2 bytes are used for the header size */
 #define HEADER_SIZE	2
