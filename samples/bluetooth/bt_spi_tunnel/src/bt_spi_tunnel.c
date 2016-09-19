@@ -162,6 +162,20 @@ static void hexdump(const char *str, const uint8_t *packet, size_t length)
 	}
 }
 
+static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
+				    void *rx_buf, uint32_t rx_buf_len)
+{
+	int ret = 0;
+
+	SYS_LOG_DBG("bt_spi_transceive: /RDY set to 1");
+	gpio_pin_write(gpio_dev, GPIO_RDY_PIN, 1);
+	ret = spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
+	gpio_pin_write(gpio_dev, GPIO_RDY_PIN, 0);
+	SYS_LOG_DBG("bt_spi_transceive: /RDY set to 0");
+
+	return ret;
+}
+
 static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 {
 	uint8_t spi_tx_buf[255];
@@ -183,9 +197,9 @@ static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 	spi_buf_len = buf->len + 1; /* extra byte for buffer type */
 	memcpy(spi_tx_buf, &spi_buf_len, sizeof(spi_buf_len));
 	SYS_LOG_DBG("header - spi buf len: %d", spi_buf_len);
-	ret = spi_transceive(spi_dev, spi_tx_buf, 2, spi_rx_buf, 1);
+	ret = bt_spi_transceive(spi_tx_buf, 2, spi_rx_buf, 1);
 	if (ret < 0) {
-		SYS_LOG_ERR("Error in spi_transceive: %d", ret);
+		SYS_LOG_ERR("SPI transceive error (header): %d", ret);
 		nano_task_sem_give(&nano_sem_fiber);
 		return -EIO;
 	}
@@ -197,9 +211,9 @@ static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 	spi_tx_buf[0] = bt_buf_type;
 	memcpy(spi_tx_buf + 1, buf->data, buf->len);
 	SYS_LOG_DBG("sending command buffer, len: %d", buf->len + 1);
-	ret = spi_transceive(spi_dev, spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
+	ret = bt_spi_transceive(spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
 	if (ret < 0) {
-		SYS_LOG_ERR("Error in spi_transceive: %d", ret);
+		SYS_LOG_ERR("SPI transceive error (data): %d", ret);
 		nano_task_sem_give(&nano_sem_fiber);
 		return -EIO;
 	}
@@ -215,7 +229,7 @@ static void bt_spi_rx_fiber(void)
 {
 	uint8_t spi_rx_buf[255];
 	uint8_t spi_tx_buf[1] = { 0 };
-	uint32_t header;
+	uint32_t spi_buf_len;
 	uint8_t bt_buf_type;
 	struct net_buf *buf;
 	int ret;
@@ -225,19 +239,19 @@ static void bt_spi_rx_fiber(void)
 	while (1) {
 		/* First read is the header, which contains the buffer size */
 		memset(&spi_rx_buf, 0, sizeof(spi_rx_buf));
-		ret = spi_transceive(spi_dev, spi_tx_buf, sizeof(spi_tx_buf),
+		ret = bt_spi_transceive(spi_tx_buf, sizeof(spi_tx_buf),
 					spi_rx_buf, HEADER_SIZE);
 		if (ret != 0) {
-			SYS_LOG_ERR("Failed to read from SPI, err %d", ret);
+			SYS_LOG_ERR("SPI transceive error (header): %d", ret);
 			continue;
 		}
 		/* Check buffer content:
 		 * If buffer contains only 0, master ready to accept data
 		 * If buffer > 0, read buffer and add to the queue
 		 */
-		memcpy(&header, spi_rx_buf, HEADER_SIZE);
-		SYS_LOG_DBG("Header: buf size %d", header);
-		if (header == 0) {
+		memcpy(&spi_buf_len, spi_rx_buf, HEADER_SIZE);
+		SYS_LOG_DBG("Header: buf size %d", spi_buf_len);
+		if (spi_buf_len == 0) {
 			/* Let the tx task to do its job and wait */
 			SYS_LOG_DBG("sem give task");
 			nano_fiber_sem_give(&nano_sem_task);
@@ -245,13 +259,16 @@ static void bt_spi_rx_fiber(void)
 			nano_fiber_sem_take(&nano_sem_fiber, TICKS_UNLIMITED);
 			continue;
 		}
+
+		/* TODO: manage multiple read operations (buf > 255) */
 		memset(&spi_rx_buf, 0, sizeof(spi_rx_buf));
-		ret = spi_transceive(spi_dev, spi_tx_buf, sizeof(spi_tx_buf),
-					spi_rx_buf, header);
+		ret = bt_spi_transceive(spi_tx_buf, sizeof(spi_tx_buf),
+					spi_rx_buf, spi_buf_len);
 		if (ret != 0) {
-			SYS_LOG_ERR("Failed to read from SPI, err %d", ret);
+			SYS_LOG_ERR("SPI transceive error (data): %d", ret);
 			continue;
 		}
+
 		bt_buf_type = spi_rx_buf[0];
 		switch (bt_buf_type) {
 		case BT_BUF_CMD:
@@ -276,8 +293,8 @@ static void bt_spi_rx_fiber(void)
 		}
 
 		bt_buf_set_type(buf, bt_buf_type);
-		memcpy(net_buf_add(buf, header - 1), spi_rx_buf + 1,
-							header - 1);
+		memcpy(net_buf_add(buf, spi_buf_len - 1), spi_rx_buf + 1,
+							spi_buf_len - 1);
 		hexdump(">", buf->data, buf->len);
 		bt_send(buf);
 	}
