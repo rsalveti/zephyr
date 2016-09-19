@@ -770,7 +770,8 @@ static struct device *gpio_dev;
 /* 2 bytes are used for the header size */
 #define HEADER_SIZE	2
 
-static struct gpio_callback gpio_cb;
+static struct gpio_callback gpio_req_cb;
+static struct gpio_callback gpio_rdy_cb;
 static int prev_slave_req = 0;
 static int prev_slave_rdy = 0;
 
@@ -976,14 +977,14 @@ static int spi_open(void)
 	/* TODO: Add /RDY */
 	gpio_pin_configure(gpio_dev, GPIO_REQ_PIN, GPIO_REQ_DIR |
                      GPIO_INT | GPIO_REQ_EDGE);
-	gpio_init_callback(&gpio_cb, gpio_slave_req, BIT(GPIO_REQ_PIN));
-	gpio_add_callback(gpio_dev, &gpio_cb);
+	gpio_init_callback(&gpio_req_cb, gpio_slave_req, BIT(GPIO_REQ_PIN));
+	gpio_add_callback(gpio_dev, &gpio_req_cb);
 	gpio_pin_enable_callback(gpio_dev, GPIO_REQ_PIN);
 
 	gpio_pin_configure(gpio_dev, GPIO_RDY_PIN, GPIO_RDY_DIR |
                      GPIO_INT | GPIO_RDY_EDGE);
-	gpio_init_callback(&gpio_cb, gpio_slave_rdy, BIT(GPIO_RDY_PIN));
-	gpio_add_callback(gpio_dev, &gpio_cb);
+	gpio_init_callback(&gpio_rdy_cb, gpio_slave_rdy, BIT(GPIO_RDY_PIN));
+	gpio_add_callback(gpio_dev, &gpio_rdy_cb);
 	gpio_pin_enable_callback(gpio_dev, GPIO_RDY_PIN);
 
 	nano_sem_init(&nano_sem_req);
