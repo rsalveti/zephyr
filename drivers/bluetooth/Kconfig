@@ -98,7 +98,7 @@ config BLUETOOTH_HOST_BUFFERS
 
 config BLUETOOTH_DEBUG_DRIVER
 	bool "Bluetooth driver debug"
-	depends on BLUETOOTH_DEBUG && (BLUETOOTH_UART || BLUETOOTH_CONTROLLER)
+	depends on BLUETOOTH_DEBUG && (BLUETOOTH_UART || BLUETOOTH_SPI_TRANSPORT || BLUETOOTH_CONTROLLER)
 	default n
 	help
 	  This option enables debug support for the chosen
