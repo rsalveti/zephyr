@@ -755,15 +755,16 @@ static struct device *gpio_dev;
 #define SPI_DRV_NAME		CONFIG_SPI_0_NAME
 /* TODO: Extract values from Kconfig */
 #define GPIO_DRV_NAME		"GPIOB"
-#define GPIO_REQ_DIR		GPIO_DIR_IN
-#define GPIO_REQ_PULL		GPIO_PUD_PULL_DOWN
-#define GPIO_REQ_PIN		1
-#define GPIO_EDGE		(GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE)
-
+/* Pin RDY is used by the slave to announce it is ready to transfer over spi */
 #define GPIO_RDY_DIR		GPIO_DIR_IN
 #define GPIO_RDY_PULL		GPIO_PUD_PULL_DOWN
 #define GPIO_RDY_PIN		0
-
+#define GPIO_RDY_EDGE		(GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE)
+/* Pin REQ is used by the slave to request permission to send data to master */
+#define GPIO_REQ_DIR		GPIO_DIR_IN
+#define GPIO_REQ_PULL		GPIO_PUD_PULL_DOWN
+#define GPIO_REQ_PIN		1
+#define GPIO_REQ_EDGE		(GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE)
 #endif
 
 /* 2 bytes are used for the header size */
@@ -974,13 +975,13 @@ static int spi_open(void)
 	}
 	/* TODO: Add /RDY */
 	gpio_pin_configure(gpio_dev, GPIO_REQ_PIN, GPIO_REQ_DIR |
-                     GPIO_INT | GPIO_EDGE);
+                     GPIO_INT | GPIO_REQ_EDGE);
 	gpio_init_callback(&gpio_cb, gpio_slave_req, BIT(GPIO_REQ_PIN));
 	gpio_add_callback(gpio_dev, &gpio_cb);
 	gpio_pin_enable_callback(gpio_dev, GPIO_REQ_PIN);
 
 	gpio_pin_configure(gpio_dev, GPIO_RDY_PIN, GPIO_RDY_DIR |
-                     GPIO_INT | GPIO_EDGE);
+                     GPIO_INT | GPIO_RDY_EDGE);
 	gpio_init_callback(&gpio_cb, gpio_slave_rdy, BIT(GPIO_RDY_PIN));
 	gpio_add_callback(gpio_dev, &gpio_cb);
 	gpio_pin_enable_callback(gpio_dev, GPIO_RDY_PIN);
