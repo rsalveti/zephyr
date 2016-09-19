@@ -106,7 +106,7 @@ static NET_BUF_POOL(acl_tx_pool, 2, BT_BUF_ACL_SIZE, &avail_acl_tx, NULL,
 
 /* TODO: Move to a proper place */
 /* Slave uses RDY and REQ pins to coordinate the messages with master */
-#define GPIO_DRV_NAME	"GPIO_0"
+#define GPIO_DRV_NAME	CONFIG_GPIO_NRF5_P0_DEV_NAME
 #define GPIO_RDY_DIR	GPIO_DIR_OUT
 #define GPIO_RDY_PULL	GPIO_PUD_PULL_DOWN
 #define GPIO_RDY_PIN	29

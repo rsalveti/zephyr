@@ -734,6 +734,7 @@ static void hexdump(const char *str, const uint8_t *packet, size_t length)
 #define SPI_RECV_FIBER_STACK_SIZE 1024
 static char __stack spi_recv_fiber_stack[SPI_RECV_FIBER_STACK_SIZE];
 struct nano_sem nano_sem_req;
+struct nano_sem nano_sem_rdy;
 
 static struct device *spi_dev;
 static struct device *gpio_dev;
@@ -758,6 +759,11 @@ static struct device *gpio_dev;
 #define GPIO_REQ_PULL		GPIO_PUD_PULL_DOWN
 #define GPIO_REQ_PIN		1
 #define GPIO_EDGE		(GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE)
+
+#define GPIO_RDY_DIR		GPIO_DIR_IN
+#define GPIO_RDY_PULL		GPIO_PUD_PULL_DOWN
+#define GPIO_RDY_PIN		0
+
 #endif
 
 /* 2 bytes are used for the header size */
@@ -765,6 +771,7 @@ static struct device *gpio_dev;
 
 static struct gpio_callback gpio_cb;
 static int prev_slave_req = 0;
+static int prev_slave_rdy = 0;
 
 struct spi_config spi_conf = {
 	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_SS_OUTPUT),
@@ -791,13 +798,31 @@ void gpio_slave_req(struct device *gpio, struct gpio_callback *cb,
 
 	gpio_pin_read(gpio, GPIO_REQ_PIN, &slave_req);
 	/*
-	* FIXME: multiple interrupts are generated during spi transceive,
-	* so for now just store and maintain the previous value
-	*/
+	 * FIXME: multiple interrupts are generated during spi transceive,
+	 * so for now just store and maintain the previous value
+	 */
 	if (slave_req != prev_slave_req) {
 		prev_slave_req = slave_req;
 		if (prev_slave_req == 1) {
 			nano_isr_sem_give(&nano_sem_req);
+		}
+	}
+}
+
+void gpio_slave_rdy(struct device *gpio, struct gpio_callback *cb,
+		    uint32_t pins)
+{
+	int slave_rdy;
+
+	gpio_pin_read(gpio, GPIO_RDY_PIN, &slave_rdy);
+	/*
+	 * FIXME: multiple interrupts are generated during spi transceive,
+	 * so for now just store and maintain the previous value
+	 */
+	if (slave_rdy != prev_slave_rdy) {
+		prev_slave_rdy = slave_rdy;
+		if (prev_slave_rdy == 1) {
+			nano_isr_sem_give(&nano_sem_rdy);
 		}
 	}
 }
@@ -949,10 +974,16 @@ static int spi_open(void)
 	}
 	/* TODO: Add /RDY */
 	gpio_pin_configure(gpio_dev, GPIO_REQ_PIN, GPIO_REQ_DIR |
-						GPIO_INT | GPIO_EDGE);
+                     GPIO_INT | GPIO_EDGE);
 	gpio_init_callback(&gpio_cb, gpio_slave_req, BIT(GPIO_REQ_PIN));
 	gpio_add_callback(gpio_dev, &gpio_cb);
 	gpio_pin_enable_callback(gpio_dev, GPIO_REQ_PIN);
+
+	gpio_pin_configure(gpio_dev, GPIO_RDY_PIN, GPIO_RDY_DIR |
+                     GPIO_INT | GPIO_EDGE);
+	gpio_init_callback(&gpio_cb, gpio_slave_rdy, BIT(GPIO_RDY_PIN));
+	gpio_add_callback(gpio_dev, &gpio_cb);
+	gpio_pin_enable_callback(gpio_dev, GPIO_RDY_PIN);
 
 	nano_sem_init(&nano_sem_req);
 
