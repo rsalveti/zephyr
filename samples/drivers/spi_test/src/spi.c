@@ -105,17 +105,17 @@
 unsigned char rbuf[64]     = { [0 ... 63] = 0xFF };
 unsigned char tbuf[64];
 unsigned char *m_wbuf[TOT_NUM] = {"Hello, nRF5x",
-			      "How do you do?",
-			      "Doing good, just punting BLE packets your way",
-			      "....",
-			      ".. Oh. Didn't realise. Sorry!",
-			      "You could use your /REQ /RDY lines, you know"};
+				  "How do you do?",
+				  "Doing good, just punting BLE packets your way",
+				  "....",
+				  ".. Oh. Didn't realise. Sorry!",
+				  "You could use your /REQ /RDY lines, you know"};
 unsigned char *s_wbuf[TOT_NUM] = {"Hello, STM32F4",
-			      "I'm fine, thank you. You?",
-			      "Yeah, I noticed",
-			      "Mind slowing down?",
-			      "That's OK.",
-			      "I didn't know, let me find out how"};
+				  "I'm fine, thank you. You?",
+				  "Yeah, I noticed",
+				  "Mind slowing down?",
+				  "That's OK.",
+				  "I didn't know, let me find out how"};
 
 //unsigned char m_rbuf[32]    = { [0 ... 31] = 0xFF };
 //unsigned char s_rbuf[20]    = { [0 ... 19] = 0xFF };
@@ -126,7 +126,7 @@ static void print_buf_hex(unsigned char *tx, unsigned char *rx)
 	printk("Rx: \"%s\"\n\n", rx);
 }
 
-struct spi_config spi_conf = {
+static struct spi_config spi_conf = {
 #ifdef CONFIG_SPI_STM32
 	//  .config = (FRAME_FMT | SET_FRAME_SIZE | OP_MODE | SPI_MODE_CPOL | SPI_MODE_CPHA),
 
@@ -139,7 +139,15 @@ struct spi_config spi_conf = {
 #else /* nRF5x */
 	.config = (SET_FRAME_SIZE | OP_MODE),
 #endif
+#ifdef CONFIG_SPI_SLAVE
+	.max_sys_freq = 0,
+#else
+#ifdef CONFIG_SPI_STM32
+	.max_sys_freq = SPI_STM32_CLK_FREQ_400KHZ,
+#else
 	.max_sys_freq = SPI_MAX_CLK_FREQ_250KHZ,
+#endif
+#endif
 };
 
 static void _spi_show(struct spi_config *spi_conf)
@@ -148,7 +156,7 @@ static void _spi_show(struct spi_config *spi_conf)
 	SYS_LOG_DBG("\tbits per word: %u\n",
 		    SPI_WORD_SIZE_GET(spi_conf->config));
 	SYS_LOG_DBG("\tMode: %u\n", SPI_MODE(spi_conf->config));
-	SYS_LOG_DBG("\tMax speed Hz: 0x%X\n", spi_conf->max_sys_freq);
+	SYS_LOG_DBG("\tMax speed Hz: %u\n", spi_conf->max_sys_freq);
 #if defined(CONFIG_SPI_STM32)
 	SYS_LOG_DBG("\tOperating mode: %s\n",
 		    SPI_STM32_OP_MODE_GET(spi_conf->config)? "slave": "master");
@@ -167,10 +175,16 @@ void main(void)
 	spi = device_get_binding(SPI_DRV_NAME);
 	if (!spi) {
 		SYS_LOG_ERR("Cannot find device %s\n", SPI_DRV_NAME);
+		return;
 	}
 	SYS_LOG_DBG("Starting...\n");
 
-	spi_configure(spi, &spi_conf);
+	ret = spi_configure(spi, &spi_conf);
+	if (ret < 0) {
+		SYS_LOG_ERR("Unable to configure SPI");
+		return;
+	}
+
 	spi_slave_select(spi, SPI_SLAVE);
 
 	_spi_show(&spi_conf);

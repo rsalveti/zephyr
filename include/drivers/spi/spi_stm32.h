@@ -20,6 +20,19 @@
 #ifndef __SPI_STM32_H__
 #define __SPI_STM32_H__
 
+/* Supported SPI frequencies */
+#define SPI_STM32_CLK_FREQ_200KHZ	200000
+#define SPI_STM32_CLK_FREQ_400KHZ	400000
+#define SPI_STM32_CLK_FREQ_600KHZ	600000
+#define SPI_STM32_CLK_FREQ_800KHZ	800000
+#define SPI_STM32_CLK_FREQ_1MHZ	1000000
+#define SPI_STM32_CLK_FREQ_2MHZ	2000000
+#define SPI_STM32_CLK_FREQ_4MHZ	4000000
+#define SPI_STM32_CLK_FREQ_6MHZ	6000000
+#define SPI_STM32_CLK_FREQ_8MHZ	8000000
+#define SPI_STM32_CLK_FREQ_10MHZ	10000000
+#define SPI_STM32_CLK_FREQ_20MHZ	20000000
+
 /*
  * Device configuration
  *
@@ -52,9 +65,6 @@
 
 /* STM32 SPI word/frame size is limited to 16 bits, represented as: (size - 1) */
 #define SPI_STM32_WORD_SIZE_MAX	(16)
-
-/* Support SPI frequencies */
-#define SPI_MAX_CLK_FREQ_25MHZ  foo
 
 /* Operation mode */
 #define SPI_STM32_OP_MODE_MASK       (0x3 << 12)

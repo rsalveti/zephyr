@@ -773,7 +773,7 @@ static struct gpio_callback gpio_cb;
 static int prev_slave_req = 0;
 static int prev_slave_rdy = 0;
 
-struct spi_config spi_conf = {
+static struct spi_config spi_conf = {
 	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_SS_OUTPUT),
 	.max_sys_freq = SPI_MAX_CLK_FREQ_250KHZ,
 };

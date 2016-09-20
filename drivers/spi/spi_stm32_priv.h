@@ -201,8 +201,8 @@ struct spi_stm32_config {
 /* runtime private data */
 struct spi_stm32_data {
 	uint32_t mode;		/* 0 = master, 1 = slave */
-	uint8_t frame_sz;				/* frame/word size, in bits */
-	device_sync_call_t sync;   /* synchronisationn */
+	uint8_t frame_sz;		/* frame/word size, in bits */
+	device_sync_call_t sync;	/* synchronisationn */
 	struct nano_sem sem;		/* semaphore for critical section */
 	const uint8_t *tx_buf;
 	uint8_t *rx_buf;
@@ -212,6 +212,8 @@ struct spi_stm32_data {
 	uint32_t transmitted;
 	uint32_t received;
 	uint8_t error;
+	uint32_t baud_rate;
+	struct device *clock;
 };
 
 /* Register offsets */

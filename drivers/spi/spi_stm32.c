@@ -35,6 +35,8 @@
 #include <limits.h>
 #include <power.h>
 
+#include <clock_control/stm32_clock_control.h>
+
 #include <spi.h>
 #include <spi/spi_stm32.h>
 #include "spi_stm32_priv.h"
@@ -46,6 +48,14 @@
   ((struct spi_stm32_data * const)(dev)->driver_data)
 #define SPI_REGS(dev)  \
   ((volatile struct spi_stm32 *)(DEV_CFG(dev))->base_addr)
+
+/* # of possible SPI baud rate scaler values */
+#define SPI_STM32_NUM_SCALERS		8
+
+/* SPI baud rate scaler values, programmed in SPI_CR1[BR] */
+static const uint32_t baud_rate_scaler[] = {
+	2, 4, 8, 16, 32, 64, 128, 256
+};
 
 struct pending_transfer {
 	struct device *dev;
@@ -201,16 +211,52 @@ static void spi_stm32_clear_errors(struct device *dev)
 
 /**
  * @brief Set a SPI baud rate nearest to the desired rate, without exceeding it.
- * @param baud_rate The desired baud rate.
- * @param ctar_ptr Pointer to clocking and timing attribute storage.
+ * @param dev Pointer to the device structure for the driver instance
+ * @param req_baud The desired baud rate.
  * @return The calculated baud rate or 0 if an error occurred.
  */
-static uint32_t spi_stm32_set_baud_rate(uint32_t baud_rate, uint32_t *ctar_ptr)
+static uint32_t spi_stm32_set_baud_rate(struct device *dev, uint32_t req_baud)
 {
-	SYS_LOG_DBG("spi_stm32_set_baud_rate - ");
+	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
+	struct spi_stm32_data *priv_data = DEV_DATA(dev);
+	struct spi_stm32_config *cfg = DEV_CFG(dev);
+	uint32_t clock;
+	uint32_t div;
+	uint32_t i;
 
-	/* FIXME: Unused curently */
-	return 1;
+	/* This uses a simple function that doesn't try to hard to change
+	 * the parent clock divider to make a closer match to the requested
+	 * baudrate. It is left to the user to change the value of PCLK1/PCLK2.
+	 */
+#if CONFIG_SOC_SERIES_STM32F4X
+	clock_control_get_rate(priv_data->clock, (clock_control_subsys_t *) &cfg->pclken, &clock);
+#else
+	printk("Unknown clock setup for the SPI device. Aborting.");
+	return -ENOTSUP;
+#endif
+	/* Baud rate calculations
+	 *
+	 *   Desired SPI baud rate = f_clk / SPI divider
+	 * Example (STM32F401, SPI2, PCLK2 @ 42MHz, Requested 300KHz)
+	 *
+	 *   f_clk == PCLK1 == 42MHz
+	 *   desired SPI baudrate = 300KHz
+	 *   Hence, SPI divider = 42MHz / 300KHz = 140
+	 *
+	 *   Therefore, divider = 256, since 128 would give baudrate more than asked for.
+	 */
+	div = (int) clock / req_baud;
+	SYS_LOG_DBG("Requested rate: %u Hz, parent clock: %u Hz, div: %u",
+		req_baud, clock, div);
+	/* Return first divider greater than div */
+	for (i = 0; i < SPI_STM32_NUM_SCALERS; i++) {
+		if (baud_rate_scaler[i] >= div) {
+			priv_data->baud_rate = clock / baud_rate_scaler[i];
+			return i;
+		}
+	}
+
+	return -EINVAL;
 }
 
 /**
@@ -224,15 +270,17 @@ static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 {
 	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
 	struct spi_stm32_data *priv_data = DEV_DATA(dev);
+	struct spi_stm32_config *cfg = DEV_CFG(dev);
 	uint32_t flags = config->config;
 	uint32_t frame_sz;	/* frame size, in bits */
+	int ret;
 
 	SYS_LOG_DBG("spi_stm32_configure: dev %p (regs @ 0x%x), ", dev, spi_regs);
 	SYS_LOG_DBG("config 0x%x, freq 0x%x", config->config, config->max_sys_freq);
 
 	/*
 	 * Ensure module operation is stopped and module is reset
-   */
+	 */
 	spi_stm32_stop(dev);
 
 	/* Set operational mode */
@@ -248,13 +296,15 @@ static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 	}
 
 	/* Set baud rate */
-	/* FIXME: Check config->max_sys_freq to set appropriate baud, currently fixed value */
-	spi_regs->cr1.bit.br = SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_256;
-#if 0
-	if (spi_stm32_set_baud_rate(config->max_sys_freq, &ctar) == 0) {
-		return -ENOTSUP;
+	ret = spi_stm32_set_baud_rate(dev, config->max_sys_freq);
+	if (ret >= 0) {
+		spi_regs->cr1.bit.br = ret;
+		SYS_LOG_DBG("SPI baud rate set to: %u Hz [div %u]",
+			priv_data->baud_rate, baud_rate_scaler[ret]);
+	} else {
+		SYS_LOG_DBG("Unable to set SPI to %u Hz, try changing APBx prescaler");
+		return ret;
 	}
-#endif
 
 	/* Frame format */
 	if (flags & SPI_STM32_FRAME_TI) {
@@ -554,20 +604,29 @@ static struct spi_driver_api stm32_spi_api = {
 	.transceive = spi_stm32_transceive,
 };
 
+static inline void __spi_stm32_get_clock(struct device *dev)
+{
+	struct spi_stm32_data *priv_data = DEV_DATA(dev);
+	struct device *clk =
+		device_get_binding(STM32_CLOCK_CONTROL_NAME);
+
+	__ASSERT_NO_MSG(clk);
+	priv_data->clock = clk;
+}
 
 int spi_stm32_init(struct device *dev)
 {
 	struct spi_stm32_config *cfg = DEV_CFG(dev);
 	struct spi_stm32_data *priv_data = DEV_DATA(dev);
-	struct device *clk =
-	device_get_binding(STM32_CLOCK_CONTROL_NAME);
+
+	__spi_stm32_get_clock(dev);
 
 	/* Enable module clocking */
-	clock_control_on(clk, (clock_control_subsys_t *) &cfg->pclken);
+	clock_control_on(priv_data->clock, (clock_control_subsys_t *) &cfg->pclken);
 
 	/*
 	 * Ensure module operation is stopped and module is reset
-	*/
+	 */
 	spi_stm32_stop(dev);
 	/* TODO: Reset the module through APB2RSTR */
 
