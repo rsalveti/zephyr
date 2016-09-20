@@ -841,8 +841,6 @@ static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
 		/* Wait for the sem release */
 		nano_fiber_sem_take(&nano_sem_rdy, SPI_RDY_WAIT_TIMEOUT);
 	}
-	/* Can't go too fast, otherwise it might fail to read the slave buf */
-	fiber_sleep(5);
 	ret = spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
 
 	return ret;
