@@ -44,41 +44,6 @@
 #define BT_DBG(fmt, ...)
 #endif
 
-#if defined(CONFIG_BLUETOOTH_DEBUG_DRIVER)
-static void hexdump(const char *str, const uint8_t *packet, size_t length)
-{
-	int n = 0;
-
-	if (!length) {
-		printf("%s zero-length signal packet\n", str);
-		return;
-	}
-
-	while (length--) {
-		if (n % 16 == 0) {
-			printf("%s %08X ", str, n);
-		}
-
-		printf("%02X ", *packet++);
-
-		n++;
-		if (n % 8 == 0) {
-			if (n % 16 == 0) {
-				printf("\n");
-			} else {
-				printf(" ");
-			}
-		}
-	}
-
-	if (n % 16) {
-		printf("\n");
-	}
-}
-#else
-#define hexdump(str, packet, length)
-#endif
-
 static BT_STACK_NOINIT(spi_send_fiber_stack, 1024);
 static BT_STACK_NOINIT(spi_recv_fiber_stack, 1024);
 
@@ -132,16 +97,51 @@ static struct spi_config spi_conf = {
 	.max_sys_freq = SPI_MAX_CLK_FREQ_250KHZ,
 };
 
+#if defined(CONFIG_BLUETOOTH_DEBUG_DRIVER)
+static void hexdump(const char *str, const uint8_t *packet, size_t length)
+{
+	int n = 0;
+
+	if (!length) {
+		printf("%s zero-length signal packet\n", str);
+		return;
+	}
+
+	while (length--) {
+		if (n % 16 == 0) {
+			printf("%s %08X ", str, n);
+		}
+
+		printf("%02X ", *packet++);
+
+		n++;
+		if (n % 8 == 0) {
+			if (n % 16 == 0) {
+				printf("\n");
+			} else {
+				printf(" ");
+			}
+		}
+	}
+
+	if (n % 16) {
+		printf("\n");
+	}
+}
+#else
+#define hexdump(str, packet, length)
+#endif
+
 static void _spi_show(struct spi_config *spi_conf)
 {
 	BT_DBG("SPI Configuration: %x", spi_conf->config);
 	BT_DBG("\tbits per word: %u",
-			SPI_WORD_SIZE_GET(spi_conf->config));
+		SPI_WORD_SIZE_GET(spi_conf->config));
 	BT_DBG("\tMode: %u", SPI_MODE(spi_conf->config));
 	BT_DBG("\tMax speed Hz: 0x%X", spi_conf->max_sys_freq);
 #if defined(CONFIG_SPI_STM32)
 	BT_DBG("\tOperating mode: %s",
-			SPI_STM32_OP_MODE_GET(spi_conf->config)? "slave": "master");
+		SPI_STM32_OP_MODE_GET(spi_conf->config) ? "slave": "master");
 #endif
 }
 
@@ -162,16 +162,12 @@ static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
 {
 	BT_DBG("");
 
-	int ret = 0;
-
 	/* Wait for the sem release */
 	nano_fiber_sem_take(&nano_sem_rdy, SPI_RDY_WAIT_TIMEOUT);
 
 	/* Can't go too fast, otherwise might read invalid data from slave */
 	fiber_sleep(1);
-	ret = spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
-
-	return ret;
+	return spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
 }
 
 static void spi_recv_fiber(void)
@@ -275,7 +271,7 @@ static void spi_send_fiber(void)
 		buf = net_buf_get_timeout(&bt_tx_queue, 0, TICKS_UNLIMITED);
 		nano_fiber_sem_take(&nano_sem_spi_active, TICKS_UNLIMITED);
 
-		hexdump("<= ", buf->data, buf->len);
+		hexdump("<=", buf->data, buf->len);
 
 		/* First send the header, which contains the tx buffer size */
 		memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
@@ -289,12 +285,13 @@ static void spi_send_fiber(void)
 		}
 
 		/* Now the data, until everything is transmited */
-		/* FIXME: allow buf > spi_tx_buf by transmitting multiple times */
+		/* FIXME: allow buf > spi_tx_buf */
 		memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
 		spi_tx_buf[0] = (uint8_t) bt_buf_get_type(buf);
 		memcpy(spi_tx_buf + 1, buf->data, buf->len);
 		BT_DBG("sending command buffer, len: %d", buf->len + 1);
-		ret = bt_spi_transceive(spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
+		ret = bt_spi_transceive(spi_tx_buf, buf->len + 1,
+					spi_rx_buf, 1);
 		if (ret < 0) {
 			BT_ERR("SPI transceive error (data): %d", ret);
 			goto send_done;
