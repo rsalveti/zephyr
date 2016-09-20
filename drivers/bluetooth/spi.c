@@ -79,13 +79,17 @@ static void hexdump(const char *str, const uint8_t *packet, size_t length)
 #define hexdump(str, packet, length)
 #endif
 
-#define SPI_RECV_FIBER_STACK_SIZE 1024
-static char __stack spi_recv_fiber_stack[SPI_RECV_FIBER_STACK_SIZE];
+static BT_STACK_NOINIT(spi_send_fiber_stack, 1024);
+static BT_STACK_NOINIT(spi_recv_fiber_stack, 1024);
+
 struct nano_sem nano_sem_req;
 struct nano_sem nano_sem_rdy;
+struct nano_sem nano_sem_spi_active;
 
 static struct device *spi_dev;
 static struct device *gpio_dev;
+
+struct nano_fifo bt_tx_queue;
 
 /* Frame format: 0 = Motorola, 1 = TI */
 #define SET_FRAME_FMT	0
@@ -149,6 +153,7 @@ void gpio_slave_req(struct device *gpio, struct gpio_callback *cb,
 	int slave_req;
 
 	gpio_pin_read(gpio, GPIO_REQ_PIN, &slave_req);
+	BT_DBG("slave_req: %d", slave_req);
 	/*
 	 * FIXME: multiple interrupts are generated during spi transceive,
 	 * so for now just store and maintain the previous value
@@ -167,6 +172,7 @@ void gpio_slave_rdy(struct device *gpio, struct gpio_callback *cb,
 	int slave_rdy;
 
 	gpio_pin_read(gpio, GPIO_RDY_PIN, &slave_rdy);
+	BT_DBG("slave_rdy: %d", slave_rdy);
 	/*
 	 * FIXME: multiple interrupts are generated during spi transceive,
 	 * so for now just store and maintain the previous value
@@ -183,12 +189,15 @@ static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
 				    void *rx_buf, uint32_t rx_buf_len)
 {
 	BT_DBG("");
+
 	int ret = 0;
 
 	if (prev_slave_rdy == 0) {
 		/* Wait for the sem release */
 		nano_fiber_sem_take(&nano_sem_rdy, SPI_RDY_WAIT_TIMEOUT);
 	}
+	/* Can't go too fast, otherwise might read invalid data from slave */
+	fiber_sleep(1);
 	ret = spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
 
 	return ret;
@@ -207,8 +216,9 @@ static void spi_recv_fiber(void)
 
 	while (1) {
 		nano_fiber_sem_take(&nano_sem_req, TICKS_UNLIMITED);
-
 		BT_DBG("SPI slave request to send buf");
+
+		nano_fiber_sem_take(&nano_sem_spi_active, TICKS_UNLIMITED);
 
 		/* Send empty header, announce we are ready to receive data */
 		BT_DBG("header - empty, announce ready to receive");
@@ -217,6 +227,7 @@ static void spi_recv_fiber(void)
 					spi_rx_buf, 2);
 		if (ret < 0) {
 			BT_ERR("SPI transceive error (empty header): %d", ret);
+			nano_fiber_sem_give(&nano_sem_spi_active);
 			continue;
 		}
 
@@ -226,6 +237,7 @@ static void spi_recv_fiber(void)
 					spi_rx_buf, HEADER_SIZE);
 		if (ret < 0) {
 			BT_ERR("SPI transceive error (header): %d", ret);
+			nano_fiber_sem_give(&nano_sem_spi_active);
 			continue;
 		}
 
@@ -238,8 +250,11 @@ static void spi_recv_fiber(void)
 					spi_rx_buf, spi_buf_len);
 		if (ret < 0) {
 			BT_ERR("SPI transceive error (data): %d", ret);
+			nano_fiber_sem_give(&nano_sem_spi_active);
 			continue;
 		}
+
+		nano_fiber_sem_give(&nano_sem_spi_active);
 
 		bt_buf_type = spi_rx_buf[0];
 		switch (bt_buf_type) {
@@ -269,48 +284,56 @@ static void spi_recv_fiber(void)
 		hexdump("=>", buf->data, buf->len);
 		bt_recv(buf);
 		buf = NULL;
+
+		stack_analyze("SPI recv fiber", spi_recv_fiber_stack,
+					sizeof(spi_recv_fiber_stack));
 	}
 }
 
-static int spi_send(struct net_buf *buf)
+static void spi_send_fiber(void)
 {
 	uint8_t spi_tx_buf[255];
 	uint8_t spi_rx_buf[1];
 	uint16_t spi_buf_len;
+	struct net_buf *buf;
 	int ret;
 
-	BT_DBG("buf %p type %u len %u", buf, bt_buf_get_type(buf), buf->len);
+	BT_DBG("");
 
-	if (buf->len) {
+	while (1) {
+		buf = net_buf_get_timeout(&bt_tx_queue, 0, TICKS_UNLIMITED);
+		nano_fiber_sem_take(&nano_sem_spi_active, TICKS_UNLIMITED);
+
 		hexdump("<= ", buf->data, buf->len);
+
+		/* First send the header, which contains the tx buffer size */
+		memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
+		spi_buf_len = buf->len + 1; /* extra byte for buffer type */
+		memcpy(spi_tx_buf, &spi_buf_len, sizeof(spi_buf_len));
+		BT_DBG("header - spi buf len: %d", spi_buf_len);
+		ret = bt_spi_transceive(spi_tx_buf, 2, spi_rx_buf, 1);
+		if (ret < 0) {
+			BT_ERR("SPI transceive error (header): %d", ret);
+			goto send_done;
+		}
+
+		/* Now the data, until everything is transmited */
+		/* FIXME: allow buf > spi_tx_buf by transmitting multiple times */
+		memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
+		spi_tx_buf[0] = (uint8_t) bt_buf_get_type(buf);
+		memcpy(spi_tx_buf + 1, buf->data, buf->len);
+		BT_DBG("sending command buffer, len: %d", buf->len + 1);
+		ret = bt_spi_transceive(spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
+		if (ret < 0) {
+			BT_ERR("SPI transceive error (data): %d", ret);
+			goto send_done;
+		}
+send_done:
+		nano_fiber_sem_give(&nano_sem_spi_active);
+		net_buf_unref(buf);
+		stack_analyze("SPI send fiber", spi_send_fiber_stack,
+					sizeof(spi_send_fiber_stack));
 	}
-
-	/* First send the header, which contains the tx buffer size */
-	memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
-	spi_buf_len = buf->len + 1; /* extra byte for buffer type */
-	memcpy(spi_tx_buf, &spi_buf_len, sizeof(spi_buf_len));
-	BT_DBG("header - spi buf len: %d", spi_buf_len);
-	ret = bt_spi_transceive(spi_tx_buf, 2, spi_rx_buf, 1);
-	if (ret < 0) {
-		BT_ERR("SPI transceive error (header): %d", ret);
-		return -EIO;
-	}
-
-	/* Now the data, until everything is transmited */
-	/* FIXME: allow buf > spi_tx_buf by transmitting multiple times */
-	memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
-	spi_tx_buf[0] = (uint8_t) bt_buf_get_type(buf);
-	memcpy(spi_tx_buf + 1, buf->data, buf->len);
-	BT_DBG("sending command buffer, len: %d", buf->len + 1);
-	ret = bt_spi_transceive(spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
-	if (ret < 0) {
-		BT_ERR("SPI transceive error (data): %d", ret);
-		return -EIO;
-	}
-
-	net_buf_unref(buf);
-
-	return 0;
 }
 
 static int spi_open(void)
@@ -342,9 +365,31 @@ static int spi_open(void)
 
 	nano_sem_init(&nano_sem_req);
 	nano_sem_init(&nano_sem_rdy);
+	nano_sem_init(&nano_sem_spi_active);
+	nano_sem_give(&nano_sem_spi_active);
+
+	nano_fifo_init(&bt_tx_queue);
+
+	fiber_start(spi_send_fiber_stack, sizeof(spi_send_fiber_stack),
+			(nano_fiber_entry_t) spi_send_fiber, 0, 0, 7, 0);
 
 	fiber_start(spi_recv_fiber_stack, sizeof(spi_recv_fiber_stack),
 			(nano_fiber_entry_t) spi_recv_fiber, 0, 0, 7, 0);
+
+	return 0;
+}
+
+static int spi_queue(struct net_buf *buf)
+{
+	BT_DBG("buf %p type %u len %u", buf, bt_buf_get_type(buf), buf->len);
+
+	if ((bt_buf_get_type(buf) != BT_BUF_CMD) &&
+			(bt_buf_get_type(buf) != BT_BUF_ACL_OUT)) {
+		BT_ERR("Unknown packet type %u", bt_buf_get_type(buf));
+		return -1;
+	}
+
+	net_buf_put(&bt_tx_queue, buf);
 
 	return 0;
 }
@@ -353,7 +398,7 @@ static struct bt_driver drv = {
 	.name		= "SPI_Bus",
 	.bus		= BT_DRIVER_BUS_SPI,
 	.open		= spi_open,
-	.send		= spi_send,
+	.send		= spi_queue,
 };
 
 static int _bt_spi_init(struct device *unused)
