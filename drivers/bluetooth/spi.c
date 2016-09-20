@@ -44,8 +44,8 @@
 #define BT_DBG(fmt, ...)
 #endif
 
-static BT_STACK_NOINIT(spi_send_fiber_stack, 1024);
-static BT_STACK_NOINIT(spi_recv_fiber_stack, 1024);
+static BT_STACK_NOINIT(spi_send_fiber_stack, 512);
+static BT_STACK_NOINIT(spi_recv_fiber_stack, 512);
 
 struct nano_sem nano_sem_req;
 struct nano_sem nano_sem_rdy;
