@@ -770,6 +770,8 @@ static struct device *gpio_dev;
 /* 2 bytes are used for the header size */
 #define HEADER_SIZE	2
 
+#define SPI_RDY_WAIT_TIMEOUT	100
+
 static struct gpio_callback gpio_req_cb;
 static struct gpio_callback gpio_rdy_cb;
 static int prev_slave_req = 0;
@@ -829,6 +831,23 @@ void gpio_slave_rdy(struct device *gpio, struct gpio_callback *cb,
 	}
 }
 
+static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
+				    void *rx_buf, uint32_t rx_buf_len)
+{
+	BT_DBG("");
+	int ret = 0;
+
+	if (prev_slave_rdy == 0) {
+		/* Wait for the sem release */
+		nano_fiber_sem_take(&nano_sem_rdy, SPI_RDY_WAIT_TIMEOUT);
+	}
+	/* Can't go too fast, otherwise it might fail to read the slave buf */
+	fiber_sleep(5);
+	ret = spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
+
+	return ret;
+}
+
 static void spi_recv_fiber(void)
 {
 	BT_DBG("");
@@ -848,22 +867,19 @@ static void spi_recv_fiber(void)
 		/* Send empty header, announce we are ready to receive data */
 		BT_DBG("header - empty, announce ready to receive");
 		memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
-		ret = spi_transceive(spi_dev, spi_tx_buf, sizeof(spi_tx_buf),
-						spi_rx_buf, 2);
+		ret = bt_spi_transceive(spi_tx_buf, sizeof(spi_tx_buf),
+					spi_rx_buf, 2);
 		if (ret < 0) {
-			BT_ERR("Error in spi_transceive: %d", ret);
+			BT_ERR("SPI transceive error (empty header): %d", ret);
 			continue;
 		}
 
-		/* TODO: change to use the /RDY pin */
-		fiber_sleep(MSEC(150));
-
 		/* First read is the header, which contains the buffer size */
 		memset(&spi_rx_buf, 0, sizeof(spi_rx_buf));
-		ret = spi_transceive(spi_dev, spi_tx_buf, sizeof(spi_tx_buf),
-						spi_rx_buf, HEADER_SIZE);
+		ret = bt_spi_transceive(spi_tx_buf, sizeof(spi_tx_buf),
+					spi_rx_buf, HEADER_SIZE);
 		if (ret < 0) {
-			BT_ERR("1Failed to read from SPI, err %d", ret);
+			BT_ERR("SPI transceive error (header): %d", ret);
 			continue;
 		}
 
@@ -871,14 +887,11 @@ static void spi_recv_fiber(void)
 		memcpy(&spi_buf_len, spi_rx_buf, HEADER_SIZE);
 		BT_DBG("Header: buf size %d", spi_buf_len);
 
-		/* TODO: change to use the /RDY pin */
-		fiber_sleep(MSEC(150));
-
 		memset(&spi_rx_buf, 0, sizeof(spi_rx_buf));
-		ret = spi_transceive(spi_dev, spi_tx_buf, sizeof(spi_tx_buf),
-				spi_rx_buf, spi_buf_len);
+		ret = bt_spi_transceive(spi_tx_buf, sizeof(spi_tx_buf),
+					spi_rx_buf, spi_buf_len);
 		if (ret < 0) {
-			BT_ERR("Failed to read from SPI, err %d", ret);
+			BT_ERR("SPI transceive error (data): %d", ret);
 			continue;
 		}
 
@@ -931,16 +944,11 @@ static int spi_send(struct net_buf *buf)
 	spi_buf_len = buf->len + 1; /* extra byte for buffer type */
 	memcpy(spi_tx_buf, &spi_buf_len, sizeof(spi_buf_len));
 	BT_DBG("header - spi buf len: %d", spi_buf_len);
-	ret = spi_transceive(spi_dev, spi_tx_buf, 2, spi_rx_buf, 1);
+	ret = bt_spi_transceive(spi_tx_buf, 2, spi_rx_buf, 1);
 	if (ret < 0) {
-		BT_ERR("Error in spi_transceive: %d", ret);
+		BT_ERR("SPI transceive error (header): %d", ret);
 		return -EIO;
 	}
-
-	/* FIXME: can't go too fast, otherwise nRF51 will fail to read data.
-	 * TODO: change to use the /RDY pin.
-	 */
-	fiber_sleep(MSEC(150));
 
 	/* Now the data, until everything is transmited */
 	/* FIXME: allow buf > spi_tx_buf by transmitting multiple times */
@@ -948,9 +956,9 @@ static int spi_send(struct net_buf *buf)
 	spi_tx_buf[0] = (uint8_t) bt_buf_get_type(buf);
 	memcpy(spi_tx_buf + 1, buf->data, buf->len);
 	BT_DBG("sending command buffer, len: %d", buf->len + 1);
-	ret = spi_transceive(spi_dev, spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
+	ret = bt_spi_transceive(spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
 	if (ret < 0) {
-		BT_ERR("Error in spi_transceive: %d", ret);
+		BT_ERR("SPI transceive error (data): %d", ret);
 		return -EIO;
 	}
 
@@ -974,20 +982,20 @@ static int spi_open(void)
 						GPIO_DRV_NAME);
 		return -EIO;
 	}
-	/* TODO: Add /RDY */
 	gpio_pin_configure(gpio_dev, GPIO_REQ_PIN, GPIO_REQ_DIR |
-                     GPIO_INT | GPIO_REQ_EDGE);
+					GPIO_INT | GPIO_REQ_EDGE);
 	gpio_init_callback(&gpio_req_cb, gpio_slave_req, BIT(GPIO_REQ_PIN));
 	gpio_add_callback(gpio_dev, &gpio_req_cb);
 	gpio_pin_enable_callback(gpio_dev, GPIO_REQ_PIN);
 
 	gpio_pin_configure(gpio_dev, GPIO_RDY_PIN, GPIO_RDY_DIR |
-                     GPIO_INT | GPIO_RDY_EDGE);
+					GPIO_INT | GPIO_RDY_EDGE);
 	gpio_init_callback(&gpio_rdy_cb, gpio_slave_rdy, BIT(GPIO_RDY_PIN));
 	gpio_add_callback(gpio_dev, &gpio_rdy_cb);
 	gpio_pin_enable_callback(gpio_dev, GPIO_RDY_PIN);
 
 	nano_sem_init(&nano_sem_req);
+	nano_sem_init(&nano_sem_rdy);
 
 	fiber_start(spi_recv_fiber_stack, sizeof(spi_recv_fiber_stack),
 			(nano_fiber_entry_t) spi_recv_fiber, 0, 0, 7, 0);

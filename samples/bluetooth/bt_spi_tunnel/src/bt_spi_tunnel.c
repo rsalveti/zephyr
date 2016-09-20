@@ -167,11 +167,10 @@ static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
 {
 	int ret = 0;
 
-	SYS_LOG_DBG("bt_spi_transceive: /RDY set to 1");
+	SYS_LOG_DBG("bt_spi_transceive: /RDY set to 1 -> 0 (notify master)");
 	gpio_pin_write(gpio_dev, GPIO_RDY_PIN, 1);
-	ret = spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
 	gpio_pin_write(gpio_dev, GPIO_RDY_PIN, 0);
-	SYS_LOG_DBG("bt_spi_transceive: /RDY set to 0");
+	ret = spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
 
 	return ret;
 }
@@ -190,6 +189,8 @@ static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 	/* Wait until rx fiber says we're good to go */
 	SYS_LOG_DBG("sem take task, wait for rx fiber");
 	nano_task_sem_take(&nano_sem_task, TICKS_UNLIMITED);
+
+	SYS_LOG_DBG("setting /REQ to 0");
 	gpio_pin_write(gpio_dev, GPIO_REQ_PIN, 0);
 
 	/* Send the header, containing the buf size */
