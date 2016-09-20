@@ -21,7 +21,7 @@
  *
  * Based on reference manual:
  *   RM0368 Reference manual STM32F401xB/C and STM32F401xD/E
- *   advanced ARM ® -based 32-bit MCUs
+ *   advanced ARM Â® -based 32-bit MCUs
  *
  * Chapter 6. Reset and Clock control (RCC) for STM43F401xB/C and STM32F401xD/E
  */
@@ -241,24 +241,6 @@ static struct clock_control_driver_api stm32f4x_clock_control_api = {
  *
  * Configure flash access time latency depending on SYSCLK.
  */
-static inline void __setup_flash(void)
-{
-	volatile struct stm32f4x_flash *flash =
-		(struct stm32f4x_flash *)(FLASH_R_BASE);
-	uint32_t tmpreg = 0;
-
-	/* TODO: Make it to also take voltage into account, for now assuming 3.3V */
-	if (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC <= 30000000) {
-		flash->acr.bit.latency = STM32F4X_FLASH_LATENCY_0;
-	} else if (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC <= 60000000) {
-		flash->acr.bit.latency = STM32F4X_FLASH_LATENCY_1;
-	} else if (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC <= 84000000) {
-		flash->acr.bit.latency = STM32F4X_FLASH_LATENCY_2;
-	}
-
-	/* Make sure latency was set */
-	tmpreg = flash->acr.bit.latency;
-}
 
 int stm32f4x_clock_control_init(struct device *dev)
 {
