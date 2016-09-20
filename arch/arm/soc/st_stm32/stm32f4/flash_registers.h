@@ -17,6 +17,57 @@
 #ifndef _STM32F4X_FLASH_REGISTERS_H_
 #define _STM32F4X_FLASH_REGISTERS_H_
 
+/*******************  Bits definition for FLASH_SR register  ******************/
+#define FLASH_SR_EOP                         ((uint32_t)0x00000001)
+#define FLASH_SR_SOP                         ((uint32_t)0x00000002)
+#define FLASH_SR_WRPERR                      ((uint32_t)0x00000010)
+#define FLASH_SR_PGAERR                      ((uint32_t)0x00000020)
+#define FLASH_SR_PGPERR                      ((uint32_t)0x00000040)
+#define FLASH_SR_PGSERR                      ((uint32_t)0x00000080)
+#define FLASH_SR_BSY                         ((uint32_t)0x00010000)
+
+/*******************  Bits definition for FLASH_CR register  ******************/
+#define FLASH_CR_PG                          ((uint32_t)0x00000001)
+#define FLASH_CR_SER                         ((uint32_t)0x00000002)
+#define FLASH_CR_MER                         ((uint32_t)0x00000004)
+#define FLASH_CR_SNB                         ((uint32_t)0x000000F8)
+#define FLASH_CR_SNB_0                       ((uint32_t)0x00000008)
+#define FLASH_CR_SNB_1                       ((uint32_t)0x00000010)
+#define FLASH_CR_SNB_2                       ((uint32_t)0x00000020)
+#define FLASH_CR_SNB_3                       ((uint32_t)0x00000040)
+#define FLASH_CR_SNB_4                       ((uint32_t)0x00000080)
+#define FLASH_CR_PSIZE                       ((uint32_t)0x00000300)
+#define FLASH_CR_PSIZE_0                     ((uint32_t)0x00000100)
+#define FLASH_CR_PSIZE_1                     ((uint32_t)0x00000200)
+#define FLASH_CR_STRT                        ((uint32_t)0x00010000)
+#define FLASH_CR_EOPIE                       ((uint32_t)0x01000000)
+#define FLASH_CR_LOCK                        ((uint32_t)0x80000000)
+/***/
+#define FLASH_FLAG_EOP				FLASH_SR_EOP
+#define FLASH_FLAG_OPERR			FLASH_SR_SOP
+#define FLASH_FLAG_WRPERR			FLASH_SR_WRPERR
+#define FLASH_FLAG_PGAERR			FLASH_SR_PGAERR
+#define FLASH_FLAG_PGPERR			FLASH_SR_PGPERR
+#define FLASH_FLAG_PGSERR			FLASH_SR_PGSERR
+#define FLASH_FLAG_RDERR			((uint32_t)0x00000100)
+#define FLASH_FLAG_BSY				FLASH_SR_BSY
+/**/
+#define HAL_FLASH_ERROR_NONE			((uint32_t)0x00000000)
+#define HAL_FLASH_ERROR_RD			((uint32_t)0x00000001)
+#define HAL_FLASH_ERROR_PGS			((uint32_t)0x00000002)
+#define HAL_FLASH_ERROR_PGP			((uint32_t)0x00000004)
+#define HAL_FLASH_ERROR_PGA			((uint32_t)0x00000008)
+#define HAL_FLASH_ERROR_WRP			((uint32_t)0x00000010)
+#define HAL_FLASH_ERROR_OPERATION		((uint32_t)0x00000020)
+/**/
+#define FLASH_PSIZE_BYTE			((uint32_t)0x00000000)
+#define FLASH_PSIZE_WORD			((uint32_t)0x00000200)
+#define CR_PSIZE_MASK				((uint32_t)0xFFFFFCFF)
+
+#define FLASH_KEY1				((uint32_t)0x45670123)
+#define FLASH_KEY2				((uint32_t)0xCDEF89AB)
+#define SECTOR_MASK				((uint32_t)0xFFFFFF07)
+
 /**
  * @brief
  *
@@ -51,11 +102,11 @@ union __flash_acr {
 /* 3.8.7 Embedded flash registers */
 struct stm32f4x_flash {
 	union __flash_acr acr;
-	uint32_t keyr;
-	uint32_t optkeyr;
-	uint32_t sr;
-	uint32_t cr;
-	uint32_t optcr;
+	uint32_t key;
+	uint32_t optkey;
+	volatile uint32_t status;
+	uint32_t ctrl;
+	uint32_t optctrl;
 };
 
 #endif	/* _STM32F4X_FLASHREGISTERS_H_ */

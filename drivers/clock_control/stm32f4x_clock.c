@@ -243,9 +243,16 @@ static struct clock_control_driver_api stm32f4x_clock_control_api = {
  */
 static inline void __setup_flash(void)
 {
-	volatile struct stm32f4x_flash *flash =
-		(struct stm32f4x_flash *)(FLASH_R_BASE);
+	volatile struct stm32f4x_flash *flash = (struct stm32f4x_flash *)(FLASH_R_BASE);
+	const uint32_t lock = 0x80000000;
 	uint32_t tmpreg = 0;
+
+	if ((flash->ctrl & lock)) {
+		flash->key = 0x45670123;
+		tmpreg = flash->key;
+		flash->key = 0xCDEF89AB;
+		tmpreg = flash->key;
+	}
 
 	/* TODO: Make it to also take voltage into account, for now assuming 3.3V */
 	if (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC <= 30000000) {
