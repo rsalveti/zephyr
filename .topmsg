@@ -1,6 +1,10 @@
 From: Ricardo Salveti <ricardo.salveti@linaro.org>
-Subject: cortex_m/reset.S: add reset workaround for NRF51822
+Subject: Bluetooth: Add HCI SPI raw handler sample
 
-Change-Id: Idf6f4a0262ff20b79891152a630bfb45ef14a5d0
+Sample application that allows communication between the Bluetooth HCI stack
+running on host processor and the Bluetooth controller running on the
+communication processor via SPI.
+
+Change-Id: Ia2ac24ace50595c31748e492faaf9567e8df20dd
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
-Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
