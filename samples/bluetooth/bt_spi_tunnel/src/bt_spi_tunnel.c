@@ -183,15 +183,13 @@ static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 	int ret;
 
 	/* To send data we first must notify the master side with /REQ */
-	SYS_LOG_DBG("setting /REQ to 1");
+	SYS_LOG_DBG("setting /REQ to 1 -> 0");
 	gpio_pin_write(gpio_dev, GPIO_REQ_PIN, 1);
+	gpio_pin_write(gpio_dev, GPIO_REQ_PIN, 0);
 
 	/* Wait until rx fiber says we're good to go */
 	SYS_LOG_DBG("sem take task, wait for rx fiber");
 	nano_task_sem_take(&nano_sem_task, TICKS_UNLIMITED);
-
-	SYS_LOG_DBG("setting /REQ to 0");
-	gpio_pin_write(gpio_dev, GPIO_REQ_PIN, 0);
 
 	/* Send the header, containing the buf size */
 	memset(spi_tx_buf, 0, sizeof(spi_tx_buf));

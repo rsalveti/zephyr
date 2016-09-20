@@ -111,12 +111,12 @@ struct nano_fifo bt_tx_queue;
 #define GPIO_RDY_DIR		GPIO_DIR_IN
 #define GPIO_RDY_PULL		GPIO_PUD_PULL_DOWN
 #define GPIO_RDY_PIN		0
-#define GPIO_RDY_EDGE		(GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE)
+#define GPIO_RDY_EDGE		(GPIO_INT_EDGE | GPIO_INT_ACTIVE_HIGH)
 /* Pin REQ is used by the slave to request permission to send data to master */
 #define GPIO_REQ_DIR		GPIO_DIR_IN
 #define GPIO_REQ_PULL		GPIO_PUD_PULL_DOWN
 #define GPIO_REQ_PIN		1
-#define GPIO_REQ_EDGE		(GPIO_INT_EDGE | GPIO_INT_DOUBLE_EDGE)
+#define GPIO_REQ_EDGE		(GPIO_INT_EDGE | GPIO_INT_ACTIVE_HIGH)
 #endif
 
 /* 2 bytes are used for the header size */
@@ -126,8 +126,6 @@ struct nano_fifo bt_tx_queue;
 
 static struct gpio_callback gpio_req_cb;
 static struct gpio_callback gpio_rdy_cb;
-static int prev_slave_req = 0;
-static int prev_slave_rdy = 0;
 
 static struct spi_config spi_conf = {
 	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_SS_OUTPUT),
@@ -150,39 +148,13 @@ static void _spi_show(struct spi_config *spi_conf)
 void gpio_slave_req(struct device *gpio, struct gpio_callback *cb,
 		    uint32_t pins)
 {
-	int slave_req;
-
-	gpio_pin_read(gpio, GPIO_REQ_PIN, &slave_req);
-	BT_DBG("slave_req: %d", slave_req);
-	/*
-	 * FIXME: multiple interrupts are generated during spi transceive,
-	 * so for now just store and maintain the previous value
-	 */
-	if (slave_req != prev_slave_req) {
-		prev_slave_req = slave_req;
-		if (prev_slave_req == 1) {
-			nano_isr_sem_give(&nano_sem_req);
-		}
-	}
+	nano_isr_sem_give(&nano_sem_req);
 }
 
 void gpio_slave_rdy(struct device *gpio, struct gpio_callback *cb,
 		    uint32_t pins)
 {
-	int slave_rdy;
-
-	gpio_pin_read(gpio, GPIO_RDY_PIN, &slave_rdy);
-	BT_DBG("slave_rdy: %d", slave_rdy);
-	/*
-	 * FIXME: multiple interrupts are generated during spi transceive,
-	 * so for now just store and maintain the previous value
-	 */
-	if (slave_rdy != prev_slave_rdy) {
-		prev_slave_rdy = slave_rdy;
-		if (prev_slave_rdy == 1) {
-			nano_isr_sem_give(&nano_sem_rdy);
-		}
-	}
+	nano_isr_sem_give(&nano_sem_rdy);
 }
 
 static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
@@ -192,10 +164,9 @@ static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
 
 	int ret = 0;
 
-	if (prev_slave_rdy == 0) {
-		/* Wait for the sem release */
-		nano_fiber_sem_take(&nano_sem_rdy, SPI_RDY_WAIT_TIMEOUT);
-	}
+	/* Wait for the sem release */
+	nano_fiber_sem_take(&nano_sem_rdy, SPI_RDY_WAIT_TIMEOUT);
+
 	/* Can't go too fast, otherwise might read invalid data from slave */
 	fiber_sleep(1);
 	ret = spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
