@@ -241,7 +241,8 @@ static void bt_spi_rx_fiber(void)
 			}
 			break;
 		default:
-			SYS_LOG_ERR("Unknown bluetooth buffer type");
+			SYS_LOG_ERR("Unknown bt buf type %d, invalid data",
+					bt_buf_type);
 			continue;
 		}
 

@@ -232,7 +232,8 @@ static void spi_recv_fiber(void)
 			}
 			break;
 		default:
-			BT_ERR("UNKNOWN BT BUF TYPE %d", bt_buf_type);
+			BT_ERR("Unknown bt buf type %d, invalid data",
+					bt_buf_type);
 			continue;
 		}
 
