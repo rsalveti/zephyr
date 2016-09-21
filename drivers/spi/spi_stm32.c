@@ -112,7 +112,7 @@ static inline void spi_stm32_stop(struct device *dev)
 	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
 
 	/* Ensure module operation is stopped as per Section 20.3.8 */
-	SYS_LOG_DBG("Prepare to stop\n");
+	SYS_LOG_DBG("Prepare to stop");
 	spi_stm32_quiesce(dev);
 
 	spi_regs->cr1.bit.spe = SPI_STM32_CR1_DISABLE;
@@ -138,7 +138,7 @@ static void spi_stm32_show_cr(struct device *dev)
 	__attribute((__unused__)) int q = spi_regs->cr2.val;
 
 	SYS_LOG_DBG("cr1: %x [br: %u, sw slave mgmt(ssm): %u, ssi (sw-only on master):"
-		    " %u, mstr: %u]\ncr2: %x [ssoe (master-only): %u]\n",
+		    " %u, mstr: %u]\ncr2: %x [ssoe (master-only): %u]",
 		    p, spi_regs->cr1.bit.br, spi_regs->cr1.bit.ssm, spi_regs->cr1.bit.ssi,
 		    spi_regs->cr1.bit.mstr, q, spi_regs->cr2.bit.ssoe);
 }
@@ -147,8 +147,8 @@ static void spi_stm32_show_status(struct device *dev, char *fn)
 {
 	__attribute((__unused__)) volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
 
-	SYS_LOG_DBG("%s: show_status: %x\n", fn, spi_regs->sr.val);
-	SYS_LOG_DBG("%s: txe: %u, rxne: %u, ovr: %u, modf: %u, bsy: %u, fre: %u\n", fn,
+	SYS_LOG_DBG("%s: show_status: %x", fn, spi_regs->sr.val);
+	SYS_LOG_DBG("%s: txe: %u, rxne: %u, ovr: %u, modf: %u, bsy: %u, fre: %u", fn,
 		    spi_regs->sr.bit.txe,
 		    spi_regs->sr.bit.rxne,
 		    spi_regs->sr.bit.ovr,
@@ -165,24 +165,24 @@ static void spi_stm32_clear_errors(struct device *dev)
 	uint32_t tmp;
 
 	if (status & SPI_STM32_SR_OVERRUN) {
-		SYS_LOG_DBG("Overrun error detected. Trying to recover.\n");
+		SYS_LOG_DBG("Overrun error detected. Trying to recover.");
 		tmp = spi_regs->dr;
 		tmp = spi_regs->sr.val;
 	}
 
 	if (status & SPI_STM32_SR_MODE_ERROR) {
-		SYS_LOG_ERR("MODF error detected. Trying to recover.\n");
+		SYS_LOG_ERR("MODF error detected. Trying to recover.");
 		if (priv_data->mode == SPI_STM32_MASTER_MODE) {
 			spi_regs->cr1.bit.mstr = 1;
-			SYS_LOG_DBG("Restoring master mode\n");
+			SYS_LOG_DBG("Restoring master mode");
 		} else if (priv_data->mode == SPI_STM32_SLAVE_MODE) {
 			spi_regs->cr1.bit.mstr = 0;
-			SYS_LOG_DBG("Restoring slave mode\n");
+			SYS_LOG_DBG("Restoring slave mode");
 		}
 	}
 
 	if (status & SPI_STM32_SR_CRC_ERROR) {
-		SYS_LOG_DBG("CRC error detected. Trying to recover.\n");
+		SYS_LOG_DBG("CRC error detected. Trying to recover.");
 		/* TODO: Fill up recovery process */
 	}
 
@@ -190,7 +190,7 @@ static void spi_stm32_clear_errors(struct device *dev)
 
 	if (status & (SPI_STM32_SR_OVERRUN | SPI_STM32_SR_MODE_ERROR |
 		      SPI_STM32_SR_CRC_ERROR)) {
-		SYS_LOG_ERR("Error still persists, system might be unstable\n");
+		SYS_LOG_ERR("Error still persists, system might be unstable");
 	}
 }
 
@@ -348,7 +348,7 @@ static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 	priv_data->tx_buf_len = priv_data->rx_buf_len = 0;
 
 	spi_stm32_show_cr(dev);
-	SYS_LOG_DBG("STM32 SPI Driver configured\n");
+	SYS_LOG_DBG("STM32 SPI Driver configured");
 
 	return 0;
 }
@@ -382,7 +382,7 @@ static int spi_stm32_transceive(struct device *dev,
 	pending_transfers[num].dev = dev;
 	nano_sem_give(&priv_data->sem);
 
-	SYS_LOG_DBG(": dev %p, Tx: %p (%u), Rx: %p (%u)\n",
+	SYS_LOG_DBG(": dev %p, Tx: %p (%u), Rx: %p (%u)",
 		    dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
 
 #ifdef CONFIG_SYS_LOG_SPI_LEVEL
@@ -541,11 +541,11 @@ static void spi_stm32_complete(struct device *dev, uint32_t error)
 	/* Disable transfer operations */
 	spi_stm32_stop(dev);
 
-	SYS_LOG_DBG("Total: Tx [%u], Rx [%u] bytes\n",
+	SYS_LOG_DBG("Total: Tx [%u], Rx [%u] bytes",
 		priv_data->transmitted, priv_data->received);
 
 	if (error) {
-		SYS_LOG_ERR("Transaction aborted due to error!\n");
+		SYS_LOG_ERR("Transaction aborted due to error!");
 	}
 
 	/* Signal completion */
@@ -564,7 +564,7 @@ void spi_stm32_isr(void *arg)
 	uint32_t error = 0;
 	uint16_t status = spi_regs->sr.val;
 
-	SYS_LOG_DBG("spi_stm32_isr: dev %p, status 0x%x\n", dev, status);
+	SYS_LOG_DBG("spi_stm32_isr: dev %p, status 0x%x", dev, status);
 
 	if (status & (SPI_STM32_SR_OVERRUN | SPI_STM32_SR_MODE_ERROR |
 		      SPI_STM32_SR_CRC_ERROR)) {
@@ -618,7 +618,7 @@ int spi_stm32_init(struct device *dev)
 	/* Configure and enable SPI module IRQs */
 	cfg->config_func();
 
-	SYS_LOG_DBG("STM32 SPI Driver initialized on device: %p\n", dev);
+	SYS_LOG_DBG("STM32 SPI Driver initialized on device: %p", dev);
 
 	return 0;
 }
