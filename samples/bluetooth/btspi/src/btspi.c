@@ -63,7 +63,7 @@ static struct nano_fifo avail_tx;
 static NET_BUF_POOL(tx_pool, CONFIG_BLUETOOTH_HCI_CMD_COUNT, CMD_BUF_SIZE,
 		    &avail_tx, NULL, sizeof(uint8_t));
 
-#define BT_L2CAP_MTU 64
+#define BT_L2CAP_MTU 240
 /** Data size needed for ACL buffers */
 #define BT_BUF_ACL_SIZE (CONFIG_BLUETOOTH_HCI_RECV_RESERVE + \
 			 sizeof(struct bt_hci_acl_hdr) + \
