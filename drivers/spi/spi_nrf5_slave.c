@@ -142,11 +142,11 @@ static int spis_nrf5_transceive(struct device *dev, const void *tx_buf,
 
 	/* Buffer needs to be in RAM for EasyDMA to work */
 	if (!tx_buf || !is_buf_in_ram(tx_buf)) {
-		SYS_LOG_ERR("Invalid TX buf %p\n", tx_buf);
+		SYS_LOG_ERR("Invalid TX buf %p", tx_buf);
 		return -EINVAL;
 	}
 	if (!rx_buf || !is_buf_in_ram(rx_buf)) {
-		SYS_LOG_ERR("Invalid RX buf %p\n", rx_buf);
+		SYS_LOG_ERR("Invalid RX buf %p", rx_buf);
 		return -EINVAL;
 	}
 
