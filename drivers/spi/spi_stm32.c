@@ -165,7 +165,7 @@ static void spi_stm32_clear_errors(struct device *dev)
 	uint32_t tmp;
 
 	if (status & SPI_STM32_SR_OVERRUN) {
-		SYS_LOG_DBG("Overrun error detected. Trying to recover.");
+		SYS_LOG_ERR("Overrun error detected. Trying to recover.");
 		tmp = spi_regs->dr;
 		tmp = spi_regs->sr.val;
 	}
@@ -182,7 +182,7 @@ static void spi_stm32_clear_errors(struct device *dev)
 	}
 
 	if (status & SPI_STM32_SR_CRC_ERROR) {
-		SYS_LOG_DBG("CRC error detected. Trying to recover.");
+		SYS_LOG_ERR("CRC error detected. Trying to recover.");
 		/* TODO: Fill up recovery process */
 	}
 
@@ -216,7 +216,7 @@ static uint32_t spi_stm32_set_baud_rate(struct device *dev, uint32_t req_baud)
 #if CONFIG_SOC_SERIES_STM32F4X
 	clock_control_get_rate(priv_data->clock, (clock_control_subsys_t *) &cfg->pclken, &clock);
 #else
-	printk("Unknown clock setup for the SPI device. Aborting.");
+	SYS_LOG_ERR("Unknown clock setup for the SPI device. Aborting.");
 	return -ENOTSUP;
 #endif
 	/* Baud rate calculations
@@ -259,8 +259,8 @@ static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 	uint32_t frame_sz;	/* frame size, in bits */
 	int ret;
 
-	SYS_LOG_DBG("spi_stm32_configure: dev %p (regs @ 0x%x), ", dev, spi_regs);
-	SYS_LOG_DBG("config 0x%x, freq 0x%x", config->config, config->max_sys_freq);
+	SYS_LOG_INF("dev %p (regs @ 0x%x), config 0x%x, freq 0x%x", dev,
+			spi_regs, config->config, config->max_sys_freq);
 
 	/*
 	 * Ensure module operation is stopped and module is reset
@@ -283,10 +283,11 @@ static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 	ret = spi_stm32_set_baud_rate(dev, config->max_sys_freq);
 	if (ret >= 0) {
 		spi_regs->cr1.bit.br = ret;
-		SYS_LOG_DBG("SPI baud rate set to: %u Hz [div %u]",
+		SYS_LOG_INF("SPI baud rate set to: %u Hz [div %u]",
 			priv_data->baud_rate, baud_rate_scaler[ret]);
 	} else {
-		SYS_LOG_DBG("Unable to set SPI to %u Hz, try changing APBx prescaler");
+		SYS_LOG_ERR("Unable to set SPI to %u Hz, "
+					"try changing APBx prescaler");
 		return ret;
 	}
 
@@ -335,6 +336,7 @@ static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 	 */
 	frame_sz = SPI_WORD_SIZE_GET(flags);
 	if (frame_sz > SPI_STM32_WORD_SIZE_MAX) {
+		SYS_LOG_ERR("Frame size larger than max word size");
 		return -ENOTSUP;
 	}
 
@@ -348,7 +350,7 @@ static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 	priv_data->tx_buf_len = priv_data->rx_buf_len = 0;
 
 	spi_stm32_show_cr(dev);
-	SYS_LOG_DBG("STM32 SPI Driver configured");
+	SYS_LOG_INF("STM32 SPI Driver configured");
 
 	return 0;
 }
@@ -459,10 +461,6 @@ static void spi_stm32_pull_byte(struct device *dev)
 	if (priv_data->received < priv_data->rx_buf_len) {
 		*(uint8_t *)(priv_data->rx_buf) = data;
 		priv_data->rx_buf++;
-	} else {
-		/* discard */
-		SYS_LOG_ERR("Rx buffer full, discarding [0x%x, (%c), %d]",
-			    data, data, data);
 	}
 	priv_data->received++;
 
@@ -618,7 +616,7 @@ int spi_stm32_init(struct device *dev)
 	/* Configure and enable SPI module IRQs */
 	cfg->config_func();
 
-	SYS_LOG_DBG("STM32 SPI Driver initialized on device: %p", dev);
+	SYS_LOG_INF("STM32 SPI Driver initialized on device: %p", dev);
 
 	return 0;
 }
