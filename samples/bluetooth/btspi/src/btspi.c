@@ -1,4 +1,4 @@
-/* bt_spi_tunnel.c - Program to grab raw HCI frames to send over SPI */
+/* btspi.c - Program to grab raw HCI frames to send over SPI */
 
 /*
  * Copyright (c) 2016 Linaro Limited
@@ -36,7 +36,7 @@
 
 #include <spi.h>
 #ifdef CONFIG_SPI_NRF5
-#include <spi/spi_nrf5.h>
+#include <drivers/spi/spi_nrf5.h>
 #endif
 
 #define SPI_RX_FIBER_STACK_SIZE 1024
@@ -276,7 +276,7 @@ void main(void)
 {
 	int ret;
 
-	printk("Starting Bluetooth RAW SPI Tunnel\n");
+	printk("Starting Bluetooth RAW over SPI\n");
 
 	spi_dev = device_get_binding(CONFIG_BLUETOOTH_SPI_ON_DEV_NAME);
 	if (!spi_dev) {
