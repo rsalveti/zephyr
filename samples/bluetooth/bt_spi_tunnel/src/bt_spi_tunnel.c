@@ -64,7 +64,9 @@
 
 
 #define SPI_RX_FIBER_STACK_SIZE 1024
+#define SPI_TX_FIBER_STACK_SIZE 1024
 static char __stack bt_spi_rx_fiber_stack[SPI_RX_FIBER_STACK_SIZE];
+static char __stack bt_spi_tx_fiber_stack[SPI_TX_FIBER_STACK_SIZE];
 
 static struct device *spi_dev;
 static struct device *gpio_dev;
@@ -128,8 +130,8 @@ static struct spi_config btspi_config = {
 	.max_sys_freq = 128,
 };
 
-struct nano_sem nano_sem_fiber;
-struct nano_sem nano_sem_task;
+struct nano_sem nano_sem_rx_fiber;
+struct nano_sem nano_sem_tx_fiber;
 
 /* TODO: move to standard utils */
 static void hexdump(const char *str, const uint8_t *packet, size_t length)
@@ -176,7 +178,7 @@ static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
 	return ret;
 }
 
-static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
+static inline int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 {
 	uint8_t spi_tx_buf[255];
 	uint8_t spi_rx_buf[1] = { 0 };
@@ -189,8 +191,8 @@ static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 	gpio_pin_write(gpio_dev, GPIO_REQ_PIN, 0);
 
 	/* Wait until rx fiber says we're good to go */
-	SYS_LOG_DBG("sem take task, wait for rx fiber");
-	nano_task_sem_take(&nano_sem_task, TICKS_UNLIMITED);
+	SYS_LOG_DBG("sem take tx fiber, wait for rx fiber");
+	nano_fiber_sem_take(&nano_sem_tx_fiber, TICKS_UNLIMITED);
 
 	/* Send the header, containing the buf size */
 	memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
@@ -200,7 +202,7 @@ static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 	ret = bt_spi_transceive(spi_tx_buf, 2, spi_rx_buf, 1);
 	if (ret < 0) {
 		SYS_LOG_ERR("SPI transceive error (header): %d", ret);
-		nano_task_sem_give(&nano_sem_fiber);
+		nano_fiber_sem_give(&nano_sem_rx_fiber);
 		return -EIO;
 	}
 
@@ -214,12 +216,12 @@ static int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 	ret = bt_spi_transceive(spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
 	if (ret < 0) {
 		SYS_LOG_ERR("SPI transceive error (data): %d", ret);
-		nano_task_sem_give(&nano_sem_fiber);
+		nano_fiber_sem_give(&nano_sem_rx_fiber);
 		return -EIO;
 	}
 
-	SYS_LOG_DBG("sem give fiber");
-	nano_task_sem_give(&nano_sem_fiber);
+	SYS_LOG_DBG("sem give tx fiber");
+	nano_fiber_sem_give(&nano_sem_rx_fiber);
 
 	return 0;
 }
@@ -245,6 +247,7 @@ static void bt_spi_rx_fiber(void)
 			SYS_LOG_ERR("SPI transceive error (header): %d", ret);
 			continue;
 		}
+		SYS_LOG_DBG("SPI Receiving first data");
 		/* Check buffer content:
 		 * If buffer contains only 0, master ready to accept data
 		 * If buffer > 0, read buffer and add to the queue
@@ -253,10 +256,11 @@ static void bt_spi_rx_fiber(void)
 		SYS_LOG_DBG("Header: buf size %d", spi_buf_len);
 		if (spi_buf_len == 0) {
 			/* Let the tx task to do its job and wait */
-			SYS_LOG_DBG("sem give task");
-			nano_fiber_sem_give(&nano_sem_task);
-			SYS_LOG_DBG("sem take fiber, wait for tx task");
-			nano_fiber_sem_take(&nano_sem_fiber, TICKS_UNLIMITED);
+			SYS_LOG_DBG("sem give tx fiber");
+			nano_fiber_sem_give(&nano_sem_tx_fiber);
+			SYS_LOG_DBG("sem take rx fiber, wait for tx fiber");
+			nano_fiber_sem_take(&nano_sem_rx_fiber,
+							TICKS_UNLIMITED);
 			continue;
 		}
 
@@ -292,11 +296,32 @@ static void bt_spi_rx_fiber(void)
 			continue;
 		}
 
-		bt_buf_set_type(buf, bt_buf_type);
 		memcpy(net_buf_add(buf, spi_buf_len - 1), spi_rx_buf + 1,
 							spi_buf_len - 1);
+		bt_buf_set_type(buf, bt_buf_type);
+		SYS_LOG_DBG("Sending %p, len %d, type %d", buf, buf->len,
+							bt_buf_type);
 		hexdump(">", buf->data, buf->len);
 		bt_send(buf);
+	}
+}
+
+static void bt_spi_tx_fiber(void)
+{
+	struct net_buf *buf;
+	uint8_t bt_buf_type;
+
+	while (1) {
+		/* With TICKS_UNLIMITED we always get a valid buffer */
+		buf = net_buf_get_timeout(&rx_queue, 0, TICKS_UNLIMITED);
+		bt_buf_type = bt_buf_get_type(buf);
+
+		SYS_LOG_DBG("Receiving %p, len %d", buf, buf->len);
+		hexdump("<", buf->data, buf->len);
+
+		bt_spi_tx(bt_buf_type, buf);
+
+		net_buf_unref(buf);
 	}
 }
 
@@ -333,29 +358,16 @@ void main(void)
 	net_buf_pool_init(acl_tx_pool);
 	nano_fifo_init(&rx_queue);
 
-	nano_sem_init(&nano_sem_fiber);
-	nano_sem_init(&nano_sem_task);
+	nano_sem_init(&nano_sem_rx_fiber);
+	nano_sem_init(&nano_sem_tx_fiber);
 
-	/* Receiver fiber */
+	/* Tx/Rx fibers */
 	fiber_start(bt_spi_rx_fiber_stack, sizeof(bt_spi_rx_fiber_stack),
 			(nano_fiber_entry_t) bt_spi_rx_fiber, 0, 0, 7, 0);
+	fiber_start(bt_spi_tx_fiber_stack, sizeof(bt_spi_tx_fiber_stack),
+			(nano_fiber_entry_t) bt_spi_tx_fiber, 0, 0, 7, 0);
 
 	bt_enable_raw(&rx_queue);
 
 	printk("Bluetooth RAW driver enabled\n");
-
-	while (1) {
-		struct net_buf *buf;
-		uint8_t bt_buf_type;
-
-		/* With TICKS_UNLIMITED we always get a valid buffer */
-		buf = net_buf_get_timeout(&rx_queue, 0, TICKS_UNLIMITED);
-		bt_buf_type = bt_buf_get_type(buf);
-
-		hexdump("<", buf->data, buf->len);
-
-		bt_spi_tx(bt_buf_type, buf);
-
-		net_buf_unref(buf);
-	}
 }
