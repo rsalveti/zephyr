@@ -94,7 +94,11 @@ static struct gpio_callback gpio_rdy_cb;
 
 static struct spi_config spi_conf = {
 	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_SS_OUTPUT),
+#if defined(CONFIG_SPI_STM32)
+	.max_sys_freq = SPI_STM32_CLK_FREQ_400KHZ,
+#else
 	.max_sys_freq = SPI_MAX_CLK_FREQ_250KHZ,
+#endif
 };
 
 #if defined(CONFIG_BLUETOOTH_DEBUG_DRIVER)
