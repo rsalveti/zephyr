@@ -48,7 +48,7 @@
 /* TODO: Make this generic */
 #if defined(CONFIG_SPI_STM32)
 #include <spi/spi_stm32.h>
-#define SPI_MAX_CLK_FREQ	SPI_STM32_CLK_FREQ_400KHZ
+#define SPI_MAX_CLK_FREQ	SPI_STM32_CLK_FREQ_2MHZ
 #define SPI_CONFIG_EXTRA	SPI_STM32_SLAVE_HW_SS_OUTPUT
 #define SOC_MASTER_MODE		SPI_STM32_MASTER_MODE
 /* TODO: Extract values from Kconfig */
