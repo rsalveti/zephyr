@@ -17,23 +17,13 @@
  *
  */
 
-#include <errno.h>
-
-#include <nanokernel.h>
-#include <arch/cpu.h>
-#include <device.h>
-
-#include <misc/__assert.h>
-
 #define SYS_LOG_LEVEL SYS_LOG_SPI_LEVEL
 #include <misc/sys_log.h>
 #include <misc/printk.h>
-#include <board.h>
-#include <init.h>
+#include <misc/__assert.h>
 
-#include <sys_io.h>
-#include <limits.h>
-#include <power.h>
+#include <board.h>
+#include <errno.h>
 
 #include <clock_control/stm32_clock_control.h>
 
@@ -50,10 +40,10 @@
   ((volatile struct spi_stm32 *)(DEV_CFG(dev))->base_addr)
 
 /* # of possible SPI baud rate scaler values */
-#define SPI_STM32_NUM_SCALERS		8
+#define SPI_STM32_NUM_SCALERS 8
 
 /* SPI baud rate scaler values, programmed in SPI_CR1[BR] */
-static const uint32_t baud_rate_scaler[] = {
+static const uint32_t baud_rate_scaler[SPI_STM32_NUM_SCALERS] = {
 	2, 4, 8, 16, 32, 64, 128, 256
 };
 
@@ -62,7 +52,6 @@ struct pending_transfer {
 };
 static struct pending_transfer pending_transfers[4];
 
-/* TODO: Find something unprintable that isn't typically used? */
 static const uint32_t tx_padding = 0x55;
 
 static void spi_stm32_enable_irq(struct device *dev, uint16_t flags)
@@ -98,12 +87,6 @@ static void spi_stm32_rx_quiesce(struct device *dev)
 		tmp = spi_regs->dr;
 	}
 	/* RX buffer is empty now */
-}
-
-static int spi_stm32_busy(struct device *dev)
-{
-	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
-	return spi_regs->sr.bit.bsy;
 }
 
 static void spi_stm32_quiesce(struct device *dev)
@@ -151,8 +134,8 @@ static inline void spi_stm32_start(struct device *dev)
 static void spi_stm32_show_cr(struct device *dev)
 {
 	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
-	int p = spi_regs->cr1.val;
-	int q = spi_regs->cr2.val;
+	__attribute((__unused__)) int p = spi_regs->cr1.val;
+	__attribute((__unused__)) int q = spi_regs->cr2.val;
 
 	SYS_LOG_DBG("cr1: %x [br: %u, sw slave mgmt(ssm): %u, ssi (sw-only on master):"
 		    " %u, mstr: %u]\ncr2: %x [ssoe (master-only): %u]\n",
@@ -162,7 +145,7 @@ static void spi_stm32_show_cr(struct device *dev)
 
 static void spi_stm32_show_status(struct device *dev, char *fn)
 {
-	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
+	__attribute((__unused__)) volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
 
 	SYS_LOG_DBG("%s: show_status: %x\n", fn, spi_regs->sr.val);
 	SYS_LOG_DBG("%s: txe: %u, rxne: %u, ovr: %u, modf: %u, bsy: %u, fre: %u\n", fn,
@@ -178,7 +161,7 @@ static void spi_stm32_clear_errors(struct device *dev)
 {
 	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
 	struct spi_stm32_data *priv_data = DEV_DATA(dev);
-	volatile uint32_t status = spi_regs->sr.val;
+	uint32_t status = spi_regs->sr.val;
 	uint32_t tmp;
 
 	if (status & SPI_STM32_SR_OVERRUN) {
@@ -186,8 +169,9 @@ static void spi_stm32_clear_errors(struct device *dev)
 		tmp = spi_regs->dr;
 		tmp = spi_regs->sr.val;
 	}
+
 	if (status & SPI_STM32_SR_MODE_ERROR) {
-		SYS_LOG_DBG("MODF error detected. Trying to recover.\n");
+		SYS_LOG_ERR("MODF error detected. Trying to recover.\n");
 		if (priv_data->mode == SPI_STM32_MASTER_MODE) {
 			spi_regs->cr1.bit.mstr = 1;
 			SYS_LOG_DBG("Restoring master mode\n");
@@ -195,17 +179,18 @@ static void spi_stm32_clear_errors(struct device *dev)
 			spi_regs->cr1.bit.mstr = 0;
 			SYS_LOG_DBG("Restoring slave mode\n");
 		}
-		//spi_stm32_start(dev);
 	}
+
 	if (status & SPI_STM32_SR_CRC_ERROR) {
 		SYS_LOG_DBG("CRC error detected. Trying to recover.\n");
 		/* TODO: Fill up recovery process */
 	}
 
 	status = spi_regs->sr.val;
+
 	if (status & (SPI_STM32_SR_OVERRUN | SPI_STM32_SR_MODE_ERROR |
 		      SPI_STM32_SR_CRC_ERROR)) {
-		SYS_LOG_DBG("Error still persists, system might be unstable\n");
+		SYS_LOG_ERR("Error still persists, system might be unstable\n");
 	}
 }
 
@@ -213,11 +198,11 @@ static void spi_stm32_clear_errors(struct device *dev)
  * @brief Set a SPI baud rate nearest to the desired rate, without exceeding it.
  * @param dev Pointer to the device structure for the driver instance
  * @param req_baud The desired baud rate.
- * @return The calculated baud rate or 0 if an error occurred.
+ *
+ * @return An index into the baud_rate_scaler table or an error code
  */
 static uint32_t spi_stm32_set_baud_rate(struct device *dev, uint32_t req_baud)
 {
-	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
 	struct spi_stm32_data *priv_data = DEV_DATA(dev);
 	struct spi_stm32_config *cfg = DEV_CFG(dev);
 	uint32_t clock;
@@ -264,13 +249,12 @@ static uint32_t spi_stm32_set_baud_rate(struct device *dev, uint32_t req_baud)
  * @param dev Pointer to the device structure for the driver instance
  * @param config Pointer to the application provided configuration
  *
- * @return 0 if successful, another DEV_* code otherwise.
+ * @return 0 if successful, an error code otherwise.
  */
 static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 {
 	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
 	struct spi_stm32_data *priv_data = DEV_DATA(dev);
-	struct spi_stm32_config *cfg = DEV_CFG(dev);
 	uint32_t flags = config->config;
 	uint32_t frame_sz;	/* frame size, in bits */
 	int ret;
@@ -369,8 +353,6 @@ static int spi_stm32_configure(struct device *dev, struct spi_config *config)
 	return 0;
 }
 
-static void spi_stm32_push_data(struct device *dev);
-
 /**
  * @brief Read and/or write a defined amount of data through an SPI driver
  *
@@ -428,8 +410,7 @@ static int spi_stm32_transceive(struct device *dev,
 	 * - Receive Buffer Not empty (new data arrived)
 	 * - Errors
 	 *
-	 * Note: DMA requests are not yet supported.
-	 * TODO: Should we enable RX irq when no rx queue?
+	 * NOTE: DMA requests are not yet supported.
 	 */
 	irqs = (SPI_STM32_CR2_ERRIE | SPI_STM32_CR2_RXNEIE | SPI_STM32_CR2_TXEIE);
 	spi_stm32_enable_irq(dev, irqs);
@@ -560,11 +541,11 @@ static void spi_stm32_complete(struct device *dev, uint32_t error)
 	/* Disable transfer operations */
 	spi_stm32_stop(dev);
 
-	printk("Total: Tx [%u], Rx [%u] bytes\n",
+	SYS_LOG_DBG("Total: Tx [%u], Rx [%u] bytes\n",
 		priv_data->transmitted, priv_data->received);
 
 	if (error) {
-		SYS_LOG_DBG("Transaction aborted due to error!\n");
+		SYS_LOG_ERR("Transaction aborted due to error!\n");
 	}
 
 	/* Signal completion */
@@ -580,7 +561,6 @@ void spi_stm32_isr(void *arg)
 {
 	struct device *dev = arg;
 	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
-	struct spi_stm32_data *priv_data = DEV_DATA(dev);
 	uint32_t error = 0;
 	uint16_t status = spi_regs->sr.val;
 
