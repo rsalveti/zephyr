@@ -16,7 +16,7 @@
  *
  */
 
-#define SYS_LOG_LEVEL SYS_LOG_SPI_LEVEL
+#define SYS_LOG_LEVEL CONFIG_SYS_LOG_SPI_LEVEL
 
 #include <nanokernel.h>
 #include <device.h>
