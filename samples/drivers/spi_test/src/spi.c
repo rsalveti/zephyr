@@ -131,7 +131,7 @@ static struct spi_config spi_conf = {
 	//  .config = (FRAME_FMT | SET_FRAME_SIZE | OP_MODE | SPI_MODE_CPOL | SPI_MODE_CPHA),
 
 #ifdef CONFIG_SPI_SLAVE 
-	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_NO_OUTPUT ),
+	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_NO_OUTPUT),
 #else /* MASTER */ /* Carbon STM32F4 */
 	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_SS_OUTPUT),
 #endif /* CONFIG_SPI_SLAVE */
