@@ -44,32 +44,13 @@
 #define BT_DBG(fmt, ...)
 #endif
 
-static BT_STACK_NOINIT(spi_send_fiber_stack, 512);
-static BT_STACK_NOINIT(spi_recv_fiber_stack, 512);
-
-struct nano_sem nano_sem_req;
-struct nano_sem nano_sem_rdy;
-struct nano_sem nano_sem_spi_active;
-
-static struct device *spi_dev;
-static struct device *gpio_dev;
-
-struct nano_fifo bt_tx_queue;
-
-/* Frame format: 0 = Motorola, 1 = TI */
-#define SET_FRAME_FMT	0
-/* Hard-code size to 8 bits */
-#define SET_FRAME_SIZE	SPI_WORD(8)
-#define OP_MODE		SOC_MASTER_MODE
-#define SPI_SLAVE	0
-
+/* SPI / GPIO Board Configuration */
 /* TODO: Make this generic */
 #if defined(CONFIG_SPI_STM32)
 #include <spi/spi_stm32.h>
-#define SPI_MAX_CLK_FREQ_250KHZ	128
+#define SPI_MAX_CLK_FREQ	SPI_STM32_CLK_FREQ_400KHZ
+#define SPI_CONFIG_EXTRA	SPI_STM32_SLAVE_HW_SS_OUTPUT
 #define SOC_MASTER_MODE		SPI_STM32_MASTER_MODE
-#define SOC_SLAVE_MODE		SPI_STM32_SLAVE_MODE
-#define SPI_DRV_NAME		CONFIG_SPI_0_NAME
 /* TODO: Extract values from Kconfig */
 #define GPIO_DRV_NAME		"GPIOB"
 /* Pin RDY is used by the slave to announce it is ready to transfer over spi */
@@ -82,23 +63,39 @@ struct nano_fifo bt_tx_queue;
 #define GPIO_REQ_PULL		GPIO_PUD_PULL_DOWN
 #define GPIO_REQ_PIN		1
 #define GPIO_REQ_EDGE		(GPIO_INT_EDGE | GPIO_INT_ACTIVE_HIGH)
+#else /* CONFIG_SPI_STM32 */
+#define SPI_MAX_CLK_FREQ	128
+#define SPI_CONFIG_EXTRA	0
 #endif
 
+/* Hard-code size to 8 bits */
+#define SPI_FRAME_SIZE		SPI_WORD(8)
+#define SPI_OP_MODE		SOC_MASTER_MODE
+#define SPI_SLAVE		0
+
 /* 2 bytes are used for the header size */
-#define HEADER_SIZE	2
+#define SPI_BUF_HEADER_SIZE	2
 
 #define SPI_RDY_WAIT_TIMEOUT	100
+
+static BT_STACK_NOINIT(spi_send_fiber_stack, 512);
+static BT_STACK_NOINIT(spi_recv_fiber_stack, 512);
+
+struct nano_sem nano_sem_req;
+struct nano_sem nano_sem_rdy;
+struct nano_sem nano_sem_spi_active;
+
+static struct device *spi_dev;
+static struct device *gpio_dev;
+
+struct nano_fifo bt_tx_queue;
 
 static struct gpio_callback gpio_req_cb;
 static struct gpio_callback gpio_rdy_cb;
 
 static struct spi_config spi_conf = {
-	.config = (SET_FRAME_SIZE | OP_MODE | SPI_STM32_SLAVE_HW_SS_OUTPUT),
-#if defined(CONFIG_SPI_STM32)
-	.max_sys_freq = SPI_STM32_CLK_FREQ_400KHZ,
-#else
-	.max_sys_freq = SPI_MAX_CLK_FREQ_250KHZ,
-#endif
+	.config = (SPI_FRAME_SIZE | SPI_OP_MODE | SPI_CONFIG_EXTRA),
+	.max_sys_freq = SPI_MAX_CLK_FREQ,
 };
 
 #if defined(CONFIG_BLUETOOTH_DEBUG_DRIVER)
@@ -205,7 +202,7 @@ static void spi_recv_fiber(void)
 		/* First read is the header, which contains the buffer size */
 		memset(&spi_rx_buf, 0, sizeof(spi_rx_buf));
 		ret = bt_spi_transceive(spi_tx_buf, sizeof(spi_tx_buf),
-					spi_rx_buf, HEADER_SIZE);
+					spi_rx_buf, SPI_BUF_HEADER_SIZE);
 		if (ret < 0) {
 			BT_ERR("SPI transceive error (header): %d", ret);
 			nano_fiber_sem_give(&nano_sem_spi_active);
@@ -213,7 +210,7 @@ static void spi_recv_fiber(void)
 		}
 
 		/* TODO: handle different buf sizes */
-		memcpy(&spi_buf_len, spi_rx_buf, HEADER_SIZE);
+		memcpy(&spi_buf_len, spi_rx_buf, SPI_BUF_HEADER_SIZE);
 		BT_DBG("Header: buf size %d", spi_buf_len);
 
 		memset(&spi_rx_buf, 0, sizeof(spi_rx_buf));
