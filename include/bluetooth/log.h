@@ -75,7 +75,7 @@ void bt_log(int prio, const char *fmt, ...);
 #define BT_WARN(fmt, ...)
 #define BT_INFO(fmt, ...)
 #define BT_ASSERT(cond)
-#define BT_STACK_DEBUG_EXTRA	0
+#define BT_STACK_DEBUG_EXTRA	512
 
 #endif
 
