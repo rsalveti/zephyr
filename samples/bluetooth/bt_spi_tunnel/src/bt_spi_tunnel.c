@@ -72,16 +72,10 @@ static char __stack bt_spi_tx_fiber_stack[SPI_TX_FIBER_STACK_SIZE];
 static struct device *spi_dev;
 static struct device *gpio_dev;
 
-#if 0
-#define BTSPI_BUFFER_SIZE 64
-
-/* Max Bluetooth command data size */
-#define BTSPI_CLASS_MAX_DATA_SIZE	100
-
-/* Misc. macros */
-#define LOW_BYTE(x)	((x) & 0xFF)
-#define HIGH_BYTE(x)	((x) >> 8)
-#endif
+/* Depends on the MAX_BUF_SIZE value */
+#define SPI_BUF_HEADER_SIZE	1
+/* Limit SPI buffer size to 255 based on the limit required by nRF51 */
+#define SPI_MAX_BUF_SIZE	255
 
 static struct nano_fifo rx_queue;
 
@@ -106,7 +100,9 @@ static NET_BUF_POOL(acl_tx_pool, 2, BT_BUF_ACL_SIZE, &avail_acl_tx, NULL,
 		    sizeof(uint8_t));
 
 /* FIXME: This make it nRF5 specific, generalise it later */
-#define OP_MODE SPI_NRF5_OP_MODE_SLAVE
+#define SPI_OP_MODE		SPI_NRF5_OP_MODE_SLAVE
+#define SPI_FRAME_SIZE		SPI_WORD(8)
+#define SPI_MAX_CLK_FREQ	128
 
 /* TODO: Move to a proper place */
 /* Slave uses RDY and REQ pins to coordinate the messages with master */
@@ -123,12 +119,9 @@ static NET_BUF_POOL(acl_tx_pool, 2, BT_BUF_ACL_SIZE, &avail_acl_tx, NULL,
 #define GPIO_REQ_DIR	GPIO_DIR_OUT
 #define GPIO_REQ_PULL	GPIO_PUD_PULL_DOWN
 
-/* 2 bytes are used for the header size */
-#define HEADER_SIZE	2
-
 static struct spi_config btspi_config = {
-	.config = (SPI_WORD(8) | OP_MODE),
-	.max_sys_freq = 128,
+	.config = (SPI_FRAME_SIZE | SPI_OP_MODE),
+	.max_sys_freq = SPI_MAX_CLK_FREQ,
 };
 
 struct nano_sem nano_sem_rx_fiber;
@@ -179,12 +172,18 @@ static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
 	return ret;
 }
 
-static inline int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
+static inline int bt_spi_tx(struct net_buf *buf)
 {
-	uint8_t spi_tx_buf[255];
-	uint8_t spi_rx_buf[1] = { 0 };
-	uint32_t spi_buf_len;
-	int ret;
+	uint8_t spi_tx_buf[SPI_MAX_BUF_SIZE];
+	uint8_t spi_rx_buf[2] = { 0 };
+	int ret = 0;
+
+	/* Make sure the SPI buffer size is large enough */
+	if (buf->len + 2 > sizeof(spi_tx_buf)) {
+		SYS_LOG_ERR("Net buffer too big, discarting %p len %d",
+				buf, buf->len);
+		return -EINVAL;
+	}
 
 	/* To send data we first must notify the master side with /REQ */
 	SYS_LOG_DBG("setting /REQ to 1 -> 0");
@@ -192,47 +191,34 @@ static inline int bt_spi_tx(uint8_t bt_buf_type, struct net_buf *buf)
 	gpio_pin_write(gpio_dev, GPIO_REQ_PIN, 0);
 
 	/* Wait until rx fiber says we're good to go */
-	SYS_LOG_DBG("sem take tx fiber, wait for rx fiber");
 	nano_fiber_sem_take(&nano_sem_tx_fiber, TICKS_UNLIMITED);
+	SYS_LOG_DBG("took sem tx fiber");
 
-	/* Send the header, containing the buf size */
+	/* Set buffer and send over SPI */
 	memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
-	spi_buf_len = buf->len + 1; /* extra byte for buffer type */
-	memcpy(spi_tx_buf, &spi_buf_len, sizeof(spi_buf_len));
-	SYS_LOG_DBG("header - spi buf len: %d", spi_buf_len);
-	ret = bt_spi_transceive(spi_tx_buf, 2, spi_rx_buf, 1);
+	spi_tx_buf[0] = (uint8_t) buf->len + 2; /* len and buf type */
+	spi_tx_buf[1] = (uint8_t) bt_buf_get_type(buf);
+	memcpy(spi_tx_buf + 2, buf->data, buf->len);
+	SYS_LOG_DBG("sending spi buf, type %d len %d",
+				spi_tx_buf[1], spi_tx_buf[0]);
+	ret = bt_spi_transceive(spi_tx_buf, spi_tx_buf[0],
+				spi_rx_buf, sizeof(spi_rx_buf));
 	if (ret < 0) {
-		SYS_LOG_ERR("SPI transceive error (header): %d", ret);
-		nano_fiber_sem_give(&nano_sem_rx_fiber);
-		return -EIO;
-	}
-
-	/* Then send the data */
-	/* TODO: transmit multiple times when buf > tx_buf */
-	/* TODO: should we send buf type together with header, for zero copy? */
-	memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
-	spi_tx_buf[0] = bt_buf_type;
-	memcpy(spi_tx_buf + 1, buf->data, buf->len);
-	SYS_LOG_DBG("sending command buffer, len: %d", buf->len + 1);
-	ret = bt_spi_transceive(spi_tx_buf, buf->len + 1, spi_rx_buf, 1);
-	if (ret < 0) {
-		SYS_LOG_ERR("SPI transceive error (data): %d", ret);
-		nano_fiber_sem_give(&nano_sem_rx_fiber);
-		return -EIO;
+		SYS_LOG_ERR("SPI transceive error: %d", ret);
 	}
 
 	SYS_LOG_DBG("sem give tx fiber");
 	nano_fiber_sem_give(&nano_sem_rx_fiber);
 
-	return 0;
+	return ret;
 }
 
 /* Fiber responsible for receiving data from master */
 static void bt_spi_rx_fiber(void)
 {
-	uint8_t spi_rx_buf[255];
-	uint8_t spi_tx_buf[1] = { 0 };
-	uint32_t spi_buf_len;
+	uint8_t spi_rx_buf[SPI_MAX_BUF_SIZE];
+	uint8_t spi_tx_buf[2] = { 0 };
+	uint8_t spi_buf_len;
 	uint8_t bt_buf_type;
 	struct net_buf *buf;
 	int ret;
@@ -240,21 +226,16 @@ static void bt_spi_rx_fiber(void)
 	SYS_LOG_DBG("Starting bt_spi_rx_fiber");
 
 	while (1) {
-		/* First read is the header, which contains the buffer size */
 		memset(&spi_rx_buf, 0, sizeof(spi_rx_buf));
 		ret = bt_spi_transceive(spi_tx_buf, sizeof(spi_tx_buf),
-					spi_rx_buf, HEADER_SIZE);
+					spi_rx_buf, sizeof(spi_rx_buf));
 		if (ret != 0) {
-			SYS_LOG_ERR("SPI transceive error (header): %d", ret);
+			SYS_LOG_ERR("SPI transceive error: %d", ret);
 			continue;
 		}
-		SYS_LOG_DBG("SPI Receiving first data");
-		/* Check buffer content:
-		 * If buffer contains only 0, master ready to accept data
-		 * If buffer > 0, read buffer and add to the queue
-		 */
-		memcpy(&spi_buf_len, spi_rx_buf, HEADER_SIZE);
-		SYS_LOG_DBG("Header: buf size %d", spi_buf_len);
+		spi_buf_len = spi_rx_buf[0];
+		SYS_LOG_DBG("Received SPI buf buf size %d", spi_buf_len);
+
 		if (spi_buf_len == 0) {
 			/* Let the tx task to do its job and wait */
 			SYS_LOG_DBG("sem give tx fiber");
@@ -265,16 +246,8 @@ static void bt_spi_rx_fiber(void)
 			continue;
 		}
 
-		/* TODO: manage multiple read operations (buf > 255) */
-		memset(&spi_rx_buf, 0, sizeof(spi_rx_buf));
-		ret = bt_spi_transceive(spi_tx_buf, sizeof(spi_tx_buf),
-					spi_rx_buf, spi_buf_len);
-		if (ret != 0) {
-			SYS_LOG_ERR("SPI transceive error (data): %d", ret);
-			continue;
-		}
+		bt_buf_type = spi_rx_buf[1];
 
-		bt_buf_type = spi_rx_buf[0];
 		switch (bt_buf_type) {
 		case BT_BUF_CMD:
 			SYS_LOG_DBG("BT rx buf type BUF_CMD");
@@ -297,8 +270,8 @@ static void bt_spi_rx_fiber(void)
 			continue;
 		}
 
-		memcpy(net_buf_add(buf, spi_buf_len - 1), spi_rx_buf + 1,
-							spi_buf_len - 1);
+		memcpy(net_buf_add(buf, spi_buf_len - 2), spi_rx_buf + 2,
+							spi_buf_len - 2);
 		bt_buf_set_type(buf, bt_buf_type);
 		SYS_LOG_DBG("Sending %p, len %d, type %d", buf, buf->len,
 							bt_buf_type);
@@ -310,17 +283,15 @@ static void bt_spi_rx_fiber(void)
 static void bt_spi_tx_fiber(void)
 {
 	struct net_buf *buf;
-	uint8_t bt_buf_type;
 
 	while (1) {
 		/* With TICKS_UNLIMITED we always get a valid buffer */
 		buf = net_buf_get_timeout(&rx_queue, 0, TICKS_UNLIMITED);
-		bt_buf_type = bt_buf_get_type(buf);
 
 		SYS_LOG_DBG("Receiving %p, len %d", buf, buf->len);
 		hexdump("<", buf->data, buf->len);
 
-		bt_spi_tx(bt_buf_type, buf);
+		bt_spi_tx(buf);
 
 		net_buf_unref(buf);
 	}
