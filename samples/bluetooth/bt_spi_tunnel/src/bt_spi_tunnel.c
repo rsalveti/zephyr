@@ -22,6 +22,7 @@
 
 #define SYS_LOG_LEVEL SYS_LOG_SPI_LEVEL
 #include <misc/sys_log.h>
+#include <misc/printk.h>
 
 #include <errno.h>
 
@@ -303,7 +304,7 @@ void main(void)
 {
 	int ret;
 
-	SYS_LOG_DBG("\n\nStart\n");
+	printk("Starting Bluetooth RAW SPI Tunnel\n");
 
 	spi_dev = device_get_binding(CONFIG_BLUETOOTH_SPI_ON_DEV_NAME);
 	if (!spi_dev) {
@@ -340,6 +341,8 @@ void main(void)
 			(nano_fiber_entry_t) bt_spi_rx_fiber, 0, 0, 7, 0);
 
 	bt_enable_raw(&rx_queue);
+
+	printk("Bluetooth RAW driver enabled\n");
 
 	while (1) {
 		struct net_buf *buf;
