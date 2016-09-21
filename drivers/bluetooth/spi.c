@@ -169,7 +169,7 @@ static inline int bt_spi_transceive(const void *tx_buf, uint32_t tx_buf_len,
 	nano_fiber_sem_take(&nano_sem_rdy, SPI_RDY_WAIT_TIMEOUT);
 
 	/* Can't go too fast, otherwise might read invalid data from slave */
-	fiber_sleep(3);
+	fiber_sleep(2);
 	return spi_transceive(spi_dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
 }
 
