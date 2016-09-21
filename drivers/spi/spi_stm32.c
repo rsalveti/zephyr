@@ -17,7 +17,7 @@
  *
  */
 
-#define SYS_LOG_LEVEL SYS_LOG_SPI_LEVEL
+#define SYS_LOG_LEVEL CONFIG_SYS_LOG_SPI_LEVEL
 #include <misc/sys_log.h>
 #include <misc/printk.h>
 #include <misc/__assert.h>
