@@ -63,6 +63,9 @@
 #define GPIO_REQ_PULL		GPIO_PUD_PULL_DOWN
 #define GPIO_REQ_PIN		1
 #define GPIO_REQ_EDGE		(GPIO_INT_EDGE | GPIO_INT_ACTIVE_HIGH)
+#if defined(CONFIG_BOARD_CARBON)
+#define GPIO_NRF51_RESET_PIN	4
+#endif
 #else /* CONFIG_SPI_STM32 */
 #define SPI_MAX_CLK_FREQ	128
 #define SPI_CONFIG_EXTRA	0
@@ -78,7 +81,7 @@
 /* Limit SPI buffer size to 255 based on the limit required by nRF51 */
 #define SPI_MAX_BUF_SIZE	255
 
-#define SPI_RDY_WAIT_TIMEOUT	100
+#define SPI_RDY_WAIT_TIMEOUT	1000
 
 static BT_STACK_NOINIT(spi_send_fiber_stack, 512);
 static BT_STACK_NOINIT(spi_recv_fiber_stack, 512);
@@ -316,6 +319,13 @@ static int spi_open(void)
 	gpio_init_callback(&gpio_rdy_cb, gpio_slave_rdy, BIT(GPIO_RDY_PIN));
 	gpio_add_callback(gpio_dev, &gpio_rdy_cb);
 	gpio_pin_enable_callback(gpio_dev, GPIO_RDY_PIN);
+
+#if defined(CONFIG_BOARD_CARBON)
+	/* Reset nRF51 */
+	gpio_pin_configure(gpio_dev, GPIO_NRF51_RESET_PIN,
+					GPIO_DIR_OUT | GPIO_PUD_PULL_DOWN);
+	gpio_pin_write(gpio_dev, GPIO_NRF51_RESET_PIN, 1);
+#endif
 
 	nano_sem_init(&nano_sem_req);
 	nano_sem_init(&nano_sem_rdy);
