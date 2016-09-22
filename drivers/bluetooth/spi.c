@@ -182,8 +182,9 @@ static void spi_recv_fiber(void)
 
 	uint8_t spi_tx_buf[2];
 	uint8_t spi_rx_buf[SPI_MAX_BUF_SIZE];
-	uint8_t spi_buf_len;
+	uint8_t buf_len;
 	uint8_t bt_buf_type;
+	uint8_t *offset;
 	struct net_buf *buf;
 	int ret;
 
@@ -214,37 +215,48 @@ static void spi_recv_fiber(void)
 		}
 		nano_fiber_sem_give(&nano_sem_spi_active);
 
-		spi_buf_len = spi_rx_buf[0];
-		bt_buf_type = spi_rx_buf[1];
-
-		switch (bt_buf_type) {
-		case BT_BUF_EVT:
-			BT_DBG("BT rx buf type EVT");
-			buf = bt_buf_get_evt(bt_buf_type);
-			if (!buf) {
-				BT_ERR("No available event buffers!");
-				continue;
-			}
-			break;
-		case BT_BUF_ACL_IN:
-			BT_DBG("BT rx buf type ACL_IN");
-			buf = bt_buf_get_acl();
-			if (!buf) {
-				BT_ERR("No available ACL buffers!");
-				continue;
-			}
-			break;
-		default:
-			BT_ERR("Unknown bt buf type %d, invalid data",
-					bt_buf_type);
+		if (spi_rx_buf[0] == 0) {
+			BT_ERR("Received 0 buffers over SPI, invalid data");
 			continue;
 		}
 
-		memcpy(net_buf_add(buf, spi_buf_len - 2), spi_rx_buf + 2,
-						spi_buf_len - 2);
-		hexdump("=>", buf->data, buf->len);
-		bt_recv(buf);
-		buf = NULL;
+		BT_DBG("received %u bufs", spi_rx_buf[0]);
+		offset = spi_rx_buf + 1;
+
+		for (int i = 0; i < spi_rx_buf[0]; i++) {
+			bt_buf_type = offset[0];
+			buf_len = offset[1];
+			offset += 2;
+
+			switch (bt_buf_type) {
+			case BT_BUF_EVT:
+				BT_DBG("BT rx buf type EVT");
+				buf = bt_buf_get_evt(bt_buf_type);
+				if (!buf) {
+					BT_ERR("No available event buffers!");
+					continue;
+				}
+				break;
+			case BT_BUF_ACL_IN:
+				BT_DBG("BT rx buf type ACL_IN");
+				buf = bt_buf_get_acl();
+				if (!buf) {
+					BT_ERR("No available ACL buffers!");
+					continue;
+				}
+				break;
+			default:
+				BT_ERR("Unknown bt buf type %d, invalid data",
+						bt_buf_type);
+				continue;
+			}
+
+			memcpy(net_buf_add(buf, buf_len), offset, buf_len);
+			hexdump("=>", buf->data, buf->len);
+			bt_recv(buf);
+			offset += buf_len;
+			buf = NULL;
+		}
 
 		stack_analyze("SPI recv fiber", spi_recv_fiber_stack,
 					sizeof(spi_recv_fiber_stack));

@@ -47,12 +47,16 @@ static char __stack bt_spi_tx_fiber_stack[SPI_TX_FIBER_STACK_SIZE];
 static struct device *spi_dev;
 static struct device *gpio_dev;
 
+static struct nano_fifo rx_queue;
+
 /* Depends on the MAX_BUF_SIZE value */
 #define SPI_BUF_HEADER_SIZE	1
 /* Limit SPI buffer size to 255 based on the limit required by nRF51 */
 #define SPI_MAX_BUF_SIZE	255
 
-static struct nano_fifo rx_queue;
+/* Bluetooth max buffer len (between cmd, evt and acl) */
+/* TODO: Find the right value by checking the kconfig options used */
+#define BT_MAX_BUF_SIZE 70 /* EVT_LEN=68 */
 
 /* HCI command buffers */
 #define CMD_BUF_SIZE (CONFIG_BLUETOOTH_HCI_SEND_RESERVE + \
@@ -63,8 +67,8 @@ static struct nano_fifo avail_tx;
 static NET_BUF_POOL(tx_pool, CONFIG_BLUETOOTH_HCI_CMD_COUNT, CMD_BUF_SIZE,
 		    &avail_tx, NULL, sizeof(uint8_t));
 
-#define BT_L2CAP_MTU 240
-/** Data size needed for ACL buffers */
+#define BT_L2CAP_MTU 251
+/* Data size needed for ACL buffers */
 #define BT_BUF_ACL_SIZE (CONFIG_BLUETOOTH_HCI_RECV_RESERVE + \
 			 sizeof(struct bt_hci_acl_hdr) + \
 			 4 /* L2CAP header size */ + \
@@ -151,14 +155,31 @@ static inline int bt_spi_tx(struct net_buf *buf)
 {
 	uint8_t spi_tx_buf[SPI_MAX_BUF_SIZE];
 	uint8_t spi_rx_buf[2] = { 0 };
+	uint8_t remaining = SPI_MAX_BUF_SIZE;
+	uint8_t *offset;
+	struct net_buf *buf_extra;
 	int ret = 0;
 
 	/* Make sure the SPI buffer size is large enough */
-	if (buf->len + 2 > sizeof(spi_tx_buf)) {
-		SYS_LOG_ERR("Net buffer too big, discarting %p len %d",
-				buf, buf->len);
+	if (buf->len > BT_MAX_BUF_SIZE) {
+		SYS_LOG_ERR("Buf larger than max buf size");
+		net_buf_unref(buf);
 		return -EINVAL;
 	}
+
+	hexdump("<", buf->data, buf->len);
+
+	memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
+
+	/* Save the first package, wait for master then add possible extras */
+	spi_tx_buf[0] = 1;
+	spi_tx_buf[1] = (uint8_t) bt_buf_get_type(buf);
+	spi_tx_buf[2] = (uint8_t) buf->len;
+	offset = spi_tx_buf + 3;
+	memcpy(offset, buf->data, buf->len);
+	offset += buf->len;
+	remaining -= buf->len + 3;
+	net_buf_unref(buf);
 
 	/* To send data we first must notify the master side with /REQ */
 	SYS_LOG_DBG("setting /REQ to 1 -> 0");
@@ -169,14 +190,31 @@ static inline int bt_spi_tx(struct net_buf *buf)
 	nano_fiber_sem_take(&nano_sem_tx_fiber, TICKS_UNLIMITED);
 	SYS_LOG_DBG("took sem tx fiber");
 
-	/* Set buffer and send over SPI */
-	memset(spi_tx_buf, 0, sizeof(spi_tx_buf));
-	spi_tx_buf[0] = (uint8_t) buf->len + 2; /* len and buf type */
-	spi_tx_buf[1] = (uint8_t) bt_buf_get_type(buf);
-	memcpy(spi_tx_buf + 2, buf->data, buf->len);
-	SYS_LOG_DBG("sending spi buf, type %d len %d",
-				spi_tx_buf[1], spi_tx_buf[0]);
-	ret = bt_spi_transceive(spi_tx_buf, spi_tx_buf[0],
+	/* In case there are already more bufs in the queue, send more */
+	while (remaining >= BT_MAX_BUF_SIZE + 2) {
+		buf_extra = net_buf_get_timeout(&rx_queue, 0, TICKS_NONE);
+		if (!buf_extra) {
+			break;
+		}
+		if (buf_extra->len > BT_MAX_BUF_SIZE) {
+			SYS_LOG_ERR("Buf larger than max buf size");
+			net_buf_unref(buf_extra);
+			nano_fiber_sem_give(&nano_sem_rx_fiber);
+			return -EINVAL;
+		}
+		hexdump("<", buf_extra->data, buf_extra->len);
+		spi_tx_buf[0] += 1;
+		offset[0] = (uint8_t) bt_buf_get_type(buf_extra);
+		offset[1] = (uint8_t) buf_extra->len;
+		offset += 2;
+		memcpy(offset, buf_extra->data, buf_extra->len);
+		offset += buf_extra->len;
+		remaining -= buf_extra->len + 2;
+		net_buf_unref(buf_extra);
+	}
+
+	SYS_LOG_DBG("sending spi buf len %d", offset - spi_tx_buf);
+	ret = bt_spi_transceive(spi_tx_buf, offset - spi_tx_buf,
 				spi_rx_buf, sizeof(spi_rx_buf));
 	if (ret < 0) {
 		SYS_LOG_ERR("SPI transceive error: %d", ret);
@@ -263,13 +301,7 @@ static void bt_spi_tx_fiber(void)
 	while (1) {
 		/* With TICKS_UNLIMITED we always get a valid buffer */
 		buf = net_buf_get_timeout(&rx_queue, 0, TICKS_UNLIMITED);
-
-		SYS_LOG_DBG("Receiving %p, len %d", buf, buf->len);
-		hexdump("<", buf->data, buf->len);
-
 		bt_spi_tx(buf);
-
-		net_buf_unref(buf);
 	}
 }
 
