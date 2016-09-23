@@ -1,6 +1,5 @@
 # Kconfig.nrf5 - nRF5X SPI driver configuration options
 #
-#
 # Copyright (c) 2016 Linaro Limited.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,12 @@
 #
 
 menuconfig SPI_NRF5
-  bool "Nordic Semiconductor nRF5x SPI controller"
-  depends on SPI && SOC_FAMILY_NRF5
-  default n
-  help
-	  SPI driver implementation for the nRF51 and nRF52 series of SoCs from Nordic Semiconductor.
+	bool "Nordic Semiconductor nRF5x SPI controller"
+	depends on SPI && SOC_FAMILY_NRF5
+	default n
+	help
+	  SPI driver implementation for the nRF51 and nRF52 series of SoCs from
+	  Nordic Semiconductor.
 
 if SPI_NRF5 && SPI_0
 
@@ -30,27 +30,27 @@ config SPI_0_NRF5_GPIO_CS
 	depends on SPI_NRF5
 	default 0
 	help
-    There are 32 GPIO pins on the nRF5X SoCs. Range is between 0 and 31.
+	  There are 32 GPIO pins on the nRF5X SoCs. Range is between 0 and 31.
 
 config SPI_0_NRF5_GPIO_SCK
 	int "GPIO number used as SPI clock"
 	depends on SPI_NRF5
 	default 0
 	help
-    There are 32 GPIO pins on the nRF5X SoCs. Range is between 0 and 31.
+	  There are 32 GPIO pins on the nRF5X SoCs. Range is between 0 and 31.
 
 config SPI_0_NRF5_GPIO_MOSI
 	int "GPIO number used as SPI MOSI line"
 	depends on SPI_NRF5
 	default 0
 	help
-    There are 32 GPIO pins on the nRF5X SoCs. Range is between 0 and 31.
+	  There are 32 GPIO pins on the nRF5X SoCs. Range is between 0 and 31.
 
 config SPI_0_NRF5_GPIO_MISO
 	int "GPIO number used as SPI MISO line"
 	depends on SPI_NRF5
 	default 0
 	help
-    There are 32 GPIO pins on the nRF5X SoCs. Range is between 0 and 31.
+	 There are 32 GPIO pins on the nRF5X SoCs. Range is between 0 and 31.
 
 endif # SPI_NRF5
