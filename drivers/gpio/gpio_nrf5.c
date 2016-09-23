@@ -23,11 +23,9 @@
 #include <nanokernel.h>
 #include <device.h>
 #include <init.h>
+#include <gpio.h>
 #include <soc.h>
 #include <sys_io.h>
-
-#include <gpio.h>
-#include <gpio/gpio_nrf5.h>
 
 /* GPIO structure for nRF5X. More detailed description of each register can be found in nrf5X.h */
 struct _gpio {
@@ -97,6 +95,25 @@ struct gpio_nrf5_data {
 #define GPIOTE_STRUCT(dev) \
 	((volatile struct _gpiote *)(DEV_GPIO_CFG(dev))->gpiote_base_addr)
 
+
+#define GPIO_SENSE_DISABLE    (GPIO_PIN_CNF_SENSE_Disabled << GPIO_PIN_CNF_SENSE_Pos)
+#define GPIO_SENSE_ENABLE     (GPIO_PIN_CNF_SENSE_Enabled << GPIO_PIN_CNF_SENSE_Pos)
+#define GPIO_PULL_DISABLE     (GPIO_PIN_CNF_PULL_Disabled << GPIO_PIN_CNF_PULL_Pos)
+#define GPIO_PULL_DOWN        (GPIO_PIN_CNF_PULL_Pulldown << GPIO_PIN_CNF_PULL_Pos)
+#define GPIO_PULL_UP          (GPIO_PIN_CNF_PULL_Pullup << GPIO_PIN_CNF_PULL_Pos)
+#define GPIO_INPUT_CONNECT    (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos)
+#define GPIO_INPUT_DISCONNECT (GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos)
+#define GPIO_DIR_INPUT        (GPIO_PIN_CNF_DIR_Input << GPIO_PIN_CNF_DIR_Pos)
+#define GPIO_DIR_OUTPUT       (GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos)
+
+#define GPIO_DRIVE_S0S1 (GPIO_PIN_CNF_DRIVE_S0S1 << GPIO_PIN_CNF_DRIVE_Pos)
+#define GPIO_DRIVE_H0S1 (GPIO_PIN_CNF_DRIVE_H0S1 << GPIO_PIN_CNF_DRIVE_Pos)
+#define GPIO_DRIVE_S0H1 (GPIO_PIN_CNF_DRIVE_S0H1 << GPIO_PIN_CNF_DRIVE_Pos)
+#define GPIO_DRIVE_H0H1 (GPIO_PIN_CNF_DRIVE_H0H1 << GPIO_PIN_CNF_DRIVE_Pos)
+#define GPIO_DRIVE_D0S1 (GPIO_PIN_CNF_DRIVE_D0S1 << GPIO_PIN_CNF_DRIVE_Pos)
+#define GPIO_DRIVE_D0H1 (GPIO_PIN_CNF_DRIVE_D0H1 << GPIO_PIN_CNF_DRIVE_Pos)
+#define GPIO_DRIVE_S0D1 (GPIO_PIN_CNF_DRIVE_S0D1 << GPIO_PIN_CNF_DRIVE_Pos)
+#define GPIO_DRIVE_H0D1 (GPIO_PIN_CNF_DRIVE_H0D1 << GPIO_PIN_CNF_DRIVE_Pos)
 
 /**
  * @brief Configure pin or port
