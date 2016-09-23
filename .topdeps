@@ -1,1 +1,1 @@
-t/defconfig-96b_carbon-Enable-the-SPI-driver-by-default
+t/drivers-spi-add-nRF5-slave-driver

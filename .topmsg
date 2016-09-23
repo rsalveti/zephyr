@@ -1,11 +1,11 @@
-From: Amit Kucheria <amit.kucheria@linaro.org>
-Subject: drivers: spi: add nRF5 slave driver
+From: Ricard Salveti <ricardo.salveti@linaro.org>
+Subject: boards: 96b_carbon_nrf51: add support for 96Boards Carbon nRF51 chip
 
-SPIS driver for nRF51 and nRF52 SoCs.
+This adds support for the nRF51 chip on the board. If you'd like to run
+zephyr on the STM32F4 chip on Carbon, you need to use the board support
+specifically for STM32.
 
-Change-Id: I168ae2bf15a688f7035bddb43bb60d00dc614dfb
-Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+Change-Id: I0cc6a6961c43b9e0c8ffae3a42fbcc089b090803
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
-Signed-off-by: Michael Scott <michael.scott@linaro.org>
-Signed-off-by: Tyler Baker <tyler.baker@linaro.org>
+Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
 Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
