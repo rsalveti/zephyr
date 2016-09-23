@@ -22,7 +22,6 @@
 #include <device.h>
 #include <errno.h>
 
-#include <gpio/gpio_nrf5.h>
 #include <misc/sys_log.h>
 #include <sys_io.h>
 #include <board.h>
