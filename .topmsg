@@ -1,9 +1,8 @@
-From: Amit Kucheria <amit.kucheria@linaro.org>
-Subject: drivers: spi: Add STM32f4 SPI driver
+From: Michael Scott <michael.scott@linaro.org>
+Subject: drivers: spi: fix location of syslog.h
 
-This driver is capable of Master and Slave mode, default being
-Master-mode. Slave mode requires CONFIG_SPI_SLAVE to be set.
+syslog.h header was moved to logging dir in commit
+a9e879e27352600ddfca3081708574a5f547bd45.
 
-Change-Id: Idc35900ade22d92fc5d0fd5a799068dec1c9449f
-Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
-Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+Change-Id: If3bd71818ac8878107e88be1f09598bf6b948ab0
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
