@@ -638,13 +638,15 @@ int hawkbit_ddi_poll(void)
 				continue;
 			}
 			len = json.data + jtks[i + 3].end - helper;
-			if (len >= sizeof(download_http)) {
+			/* Include the "/gitci/" (7) preface when checking length */
+			if (len + 7 >= sizeof(download_http)) {
 				OTA_ERR("Download HREF too big (%d)\n", len);
 				ret = - 1;
 				continue;
 			}
-			memcpy(&download_http, helper, len);
-			download_http[len] = '\0';
+			/* preface the download URL with /gitci for tinyproxy */
+			strcpy(download_http, "/gitci/");
+			strncat(download_http, helper, len);
 			OTA_DBG("Artifact address: %s\n", download_http);
 			i += 3;
 		}
