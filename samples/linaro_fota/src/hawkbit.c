@@ -301,7 +301,7 @@ static int hawkbit_query(uint8_t *tcp_buffer, size_t size,
 		OTA_ERR("No received data (ret=%d)\n", ret);
 		return -1;
 	}
-	tcp_buffer[BUF_SIZE - 1] = '\0';
+	tcp_buffer[ret] = '\0';
 
 	http_parser_init(&parser, HTTP_RESPONSE);
 	http_parser_settings_init(&http_settings);
