@@ -461,6 +461,7 @@ int hawkbit_ddi_poll(void)
 	char deployment_base[40];	/* TODO: Find a better value */
 	char download_http[200];	/* TODO: Find a better value */
 	bool update_config_data = false;
+	bool action_sleep = false;
 	int file_size = 0;
 	char *helper;
 
@@ -502,10 +503,12 @@ int hawkbit_ddi_poll(void)
 				continue;
 			}
 			len = hawkbit_time2sec(json.data + jtks[i + 5].start);
-			if (len > 0 &&
-				poll_sleep != K_SECONDS(len)) {
-				OTA_INFO("New poll sleep %d seconds\n", len);
-				poll_sleep = K_SECONDS(len);
+			if (len > 0) {
+				if (poll_sleep != K_SECONDS(len)) {
+					OTA_INFO("New poll sleep %d seconds\n", len);
+					poll_sleep = K_SECONDS(len);
+				}
+				action_sleep = true;
 				i += 5;
 			}
 		} else if (jsoneq(json.data, &jtks[i], "deploymentBase") &&
@@ -530,6 +533,9 @@ int hawkbit_ddi_poll(void)
 			i += 3;
 		}
 	}
+
+	if (action_sleep)
+		return 0;
 
 	/* Update config data if the server asked for it */
 	if (update_config_data) {
