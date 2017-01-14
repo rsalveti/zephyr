@@ -475,7 +475,7 @@ int hawkbit_ddi_poll(void)
 				product_id.name, product_id.number,
 				HAWKBIT_HOST);
 
-	if (hawkbit_query((uint8_t *) &tcp_buf, BUF_SIZE, &json) < 0) {
+	if (hawkbit_query(tcp_buf, BUF_SIZE, &json) < 0) {
 		OTA_ERR("Error when polling from Hawkbit\n");
 		return -1;
 	}
@@ -551,7 +551,7 @@ int hawkbit_ddi_poll(void)
 				deployment_base, HAWKBIT_HOST);
 
 	memset(&json, 0, sizeof(struct json_data_t));
-	if (hawkbit_query((uint8_t *) &tcp_buf, BUF_SIZE, &json) < 0) {
+	if (hawkbit_query(tcp_buf, BUF_SIZE, &json) < 0) {
 		OTA_ERR("Error when querying from Hawkbit\n");
 		return -1;
 	}
@@ -698,8 +698,7 @@ int hawkbit_ddi_poll(void)
 				     tcp_buf, BUF_SIZE,
 				     HAWKBIT_RESULT_SUCCESS,
 				     HAWKBIT_EXEC_PROCEEDING);
-	ret = hawkbit_install_update((uint8_t *) &tcp_buf, BUF_SIZE,
-					download_http, file_size);
+	ret = hawkbit_install_update(tcp_buf, BUF_SIZE, download_http, file_size);
 	if (ret != 0) {
 		OTA_ERR("Failed to install the update for action ID %d\n",
 					hawkbit_acid);
