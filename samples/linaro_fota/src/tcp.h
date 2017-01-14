@@ -15,8 +15,7 @@
  *
  */
 
-#define TCP_TX_RETRY_TIMEOUT K_SECONDS(1)
 #define TCP_RX_TIMEOUT K_SECONDS(3)
 
-int tcp_send(struct net_context *context, const char *buf, unsigned len);
-int tcp_recv(struct net_context *context, char *buf, unsigned size);
+int tcp_send(const unsigned char *buf, size_t size);
+int tcp_recv(unsigned char *buf, size_t size, int32_t timeout);

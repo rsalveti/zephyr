@@ -26,13 +26,8 @@
 
 #include <bluetooth/bluetooth.h>
 
-#include <net/ip_buf.h>
-#include <net/net_core.h>
-#include <net/net_socket.h>
-
 #include <soc.h>
-
-#include <iot/http_parser.h>
+#include <net/http_parser.h>
 
 #include "ota_debug.h"
 #include "jsmn.h"
@@ -183,14 +178,12 @@ static int handle_headers_complete_download(struct http_parser *parser)
 	return 1;
 }
 
-static int hawkbit_install_update(struct net_context *context,
-				  uint8_t *tcp_buf, const char *download_http,
+static int hawkbit_install_update(uint8_t *tcp_buf, const char *download_http,
 				  size_t file_size)
 {
 	struct http_parser_settings http_settings;
 	struct http_download_t http_data = { 0 };
 	struct http_parser parser;
-	struct net_buf *recv_buf;
 	int downloaded_size = 0;
 	int ret, len;
 
@@ -219,7 +212,7 @@ static int hawkbit_install_update(struct net_context *context,
 				"\r\n",
 				download_http, HAWKBIT_HOST);
 
-	ret = tcp_send(context, (const char *) tcp_buf, strlen(tcp_buf));
+	ret = tcp_send((const char *) tcp_buf, strlen(tcp_buf));
 	if (ret < 0) {
 		OTA_ERR("Failed to send buffer, err %d\n", ret);
 		return ret;
@@ -227,14 +220,11 @@ static int hawkbit_install_update(struct net_context *context,
 
 	/* Receive is special for download, since it writes to flash */
 	memset(tcp_buf, 0, BUF_SIZE);
-	recv_buf = net_receive(context, TCP_RX_TIMEOUT);
-	if (!recv_buf) {
-		OTA_ERR("Unable to start the download process\n");
+	len = tcp_recv((char *) tcp_buf, BUF_SIZE, TCP_RX_TIMEOUT);
+	if (len <= 0) {
+		OTA_ERR("Unable to start the download process (ret=%d)\n", len);
 		return -1;
 	}
-	len = ip_buf_appdatalen(recv_buf);
-	memcpy(tcp_buf, ip_buf_appdata(recv_buf), len);
-	ip_buf_unref(recv_buf);
 
 	/* Parse the HTTP headers available from the first buffer */
 	http_parser_execute(&parser, &http_settings,
@@ -262,13 +252,14 @@ static int hawkbit_install_update(struct net_context *context,
 	}
 
 	while (true) {
-		recv_buf = net_receive(context, TCP_RX_TIMEOUT);
-		if (!recv_buf) {
+		len = tcp_recv((char *) tcp_buf, BUF_SIZE, TCP_RX_TIMEOUT);
+		if (len <= 0) {
+			if (len < 0) {
+				OTA_ERR("Download error recieved: %d", len);
+				return -1;
+			}
 			break;
 		}
-		len = ip_buf_appdatalen(recv_buf);
-		memcpy(tcp_buf, ip_buf_appdata(recv_buf), len);
-		ip_buf_unref(recv_buf);
 		flash_write(flash_dev, FLASH_BANK1_OFFSET + downloaded_size,
 							tcp_buf, len);
 		downloaded_size += len;
@@ -287,7 +278,7 @@ static int hawkbit_install_update(struct net_context *context,
 	return 0;
 }
 
-static int hawkbit_query(struct net_context *context, uint8_t *tcp_buf,
+static int hawkbit_query(uint8_t *tcp_buf,
 			 struct json_data_t *json)
 {
 	struct http_parser_settings http_settings;
@@ -300,14 +291,14 @@ static int hawkbit_query(struct net_context *context, uint8_t *tcp_buf,
 
 	OTA_DBG("\n%s\n", tcp_buf);
 
-	ret = tcp_send(context, (const char *) tcp_buf, strlen(tcp_buf));
+	ret = tcp_send((const char *) tcp_buf, strlen(tcp_buf));
 	if (ret < 0) {
 		OTA_ERR("Failed to send buffer, err %d\n", ret);
 		return ret;
 	}
-	ret = tcp_recv(context, (char *) tcp_buf, BUF_SIZE);
-	if (ret == 0) {
-		OTA_ERR("No received data\n");
+	ret = tcp_recv((char *) tcp_buf, BUF_SIZE, K_FOREVER);
+	if (ret <= 0) {
+		OTA_ERR("No received data (ret=%d)\n", ret);
 		return -1;
 	}
 	tcp_buf[BUF_SIZE - 1] = '\0';
@@ -343,7 +334,7 @@ static int hawkbit_query(struct net_context *context, uint8_t *tcp_buf,
 	return 0;
 }
 
-static int hawkbit_report_config_data(struct net_context *context)
+static int hawkbit_report_config_data(void)
 {
 	char *helper;
 
@@ -373,7 +364,7 @@ static int hawkbit_report_config_data(struct net_context *context)
 			product_id.name, product_id.number,
 			HAWKBIT_HOST, strlen(helper), helper);
 
-	if (hawkbit_query(context, (uint8_t *) &tcp_buf, NULL) < 0) {
+	if (hawkbit_query((uint8_t *) &tcp_buf, NULL) < 0) {
 		OTA_ERR("Error when reporting config data to Hawkbit\n");
 		return -1;
 	}
@@ -381,7 +372,7 @@ static int hawkbit_report_config_data(struct net_context *context)
 	return 0;
 }
 
-static int hawkbit_report_update_status(struct net_context *context, int acid,
+static int hawkbit_report_update_status(int acid,
 					hawkbit_result_status_t status,
 					hawkbit_exec_status_t exec)
 {
@@ -450,7 +441,7 @@ static int hawkbit_report_update_status(struct net_context *context, int acid,
 			product_id.name, product_id.number, acid,
 			HAWKBIT_HOST, strlen(helper), helper);
 
-	if (hawkbit_query(context, (uint8_t *) &tcp_buf, NULL) < 0) {
+	if (hawkbit_query((uint8_t *) &tcp_buf, NULL) < 0) {
 		OTA_ERR("Error when reporting acId feedback to Hawkbit\n");
 		return -1;
 	}
@@ -458,7 +449,7 @@ static int hawkbit_report_update_status(struct net_context *context, int acid,
 	return 0;
 }
 
-int hawkbit_ddi_poll(struct net_context *context)
+int hawkbit_ddi_poll(void)
 {
 	jsmn_parser jsmnp;
 	jsmntok_t jtks[60];	/* Enough for one artifact per SM */
@@ -483,7 +474,7 @@ int hawkbit_ddi_poll(struct net_context *context)
 				product_id.name, product_id.number,
 				HAWKBIT_HOST);
 
-	if (hawkbit_query(context, (uint8_t *) &tcp_buf, &json) < 0) {
+	if (hawkbit_query((uint8_t *) &tcp_buf, &json) < 0) {
 		OTA_ERR("Error when polling from Hawkbit\n");
 		return -1;
 	}
@@ -540,7 +531,7 @@ int hawkbit_ddi_poll(struct net_context *context)
 
 	/* Update config data if the server asked for it */
 	if (update_config_data) {
-		hawkbit_report_config_data(context);
+		hawkbit_report_config_data();
 	}
 
 	if (strlen(deployment_base) == 0) {
@@ -559,7 +550,7 @@ int hawkbit_ddi_poll(struct net_context *context)
 				deployment_base, HAWKBIT_HOST);
 
 	memset(&json, 0, sizeof(struct json_data_t));
-	if (hawkbit_query(context, (uint8_t *) &tcp_buf, &json) < 0) {
+	if (hawkbit_query((uint8_t *) &tcp_buf, &json) < 0) {
 		OTA_ERR("Error when querying from Hawkbit\n");
 		return -1;
 	}
@@ -661,13 +652,13 @@ int hawkbit_ddi_poll(struct net_context *context)
 
 	if (boot_acid_read(BOOT_ACID_CURRENT) == hawkbit_acid) {
 		/* We are coming from a successful flash, update the server */
-		hawkbit_report_update_status(context, hawkbit_acid,
+		hawkbit_report_update_status(hawkbit_acid,
 					     HAWKBIT_RESULT_SUCCESS,
 					     HAWKBIT_EXEC_CLOSED);
 		return 0;
 	} else if (boot_acid_read(BOOT_ACID_UPDATE) == hawkbit_acid) {
 		/* There was already an atempt, so announce a failure */
-		hawkbit_report_update_status(context, hawkbit_acid,
+		hawkbit_report_update_status(hawkbit_acid,
 					     HAWKBIT_RESULT_FAILURE,
 					     HAWKBIT_EXEC_CLOSED);
 		return 0;
@@ -680,14 +671,14 @@ int hawkbit_ddi_poll(struct net_context *context)
 	}
 	/* Error detected when parsing the SM */
 	if (ret == -1) {
-		hawkbit_report_update_status(context, hawkbit_acid,
+		hawkbit_report_update_status(hawkbit_acid,
 					     HAWKBIT_RESULT_FAILURE,
 					     HAWKBIT_EXEC_CLOSED);
 		return -1;
 	}
 	if (file_size > FLASH_BANK_SIZE) {
 		OTA_ERR("Artifact file size too big (%d)\n", file_size);
-		hawkbit_report_update_status(context, hawkbit_acid,
+		hawkbit_report_update_status(hawkbit_acid,
 					     HAWKBIT_RESULT_FAILURE,
 					     HAWKBIT_EXEC_CLOSED);
 		return -1;
@@ -696,10 +687,10 @@ int hawkbit_ddi_poll(struct net_context *context)
 	/* Here we should have everything we need to apply the action */
 	OTA_INFO("Valid action ID %d found, proceeding with the update\n",
 					hawkbit_acid);
-	hawkbit_report_update_status(context, hawkbit_acid,
+	hawkbit_report_update_status(hawkbit_acid,
 				     HAWKBIT_RESULT_SUCCESS,
 				     HAWKBIT_EXEC_PROCEEDING);
-	ret = hawkbit_install_update(context, (uint8_t *) &tcp_buf,
+	ret = hawkbit_install_update((uint8_t *) &tcp_buf,
 					download_http, file_size);
 	if (ret != 0) {
 		OTA_ERR("Failed to install the update for action ID %d\n",
