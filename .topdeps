@@ -1,1 +1,1 @@
-t/cortex_m-reset.S-add-reset-workaround-for-NRF51822
+t/Bluetooth-Add-HCI-SPI-raw-handler-sample

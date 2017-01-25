@@ -1,10 +1,5 @@
 From: Ricardo Salveti <ricardo.salveti@linaro.org>
-Subject: Bluetooth: Add HCI SPI raw handler sample
+Subject: boards: nucleo_f401re: enable bluetooth SPI by default
 
-Sample application that allows communication between the Bluetooth HCI stack
-running on host processor and the Bluetooth controller running on the
-communication processor via SPI.
-
-Change-Id: Ia2ac24ace50595c31748e492faaf9567e8df20dd
+Change-Id: Ie7704992ea609fec279c9649460502dd7d0c5c76
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
-Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
