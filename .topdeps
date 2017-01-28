@@ -1,1 +1,1 @@
-t/Bluetooth-Add-HCI-SPI-raw-handler-sample
+t/boards-nucleo_f401re-enable-bluetooth-SPI-by-default

@@ -1,5 +1,5 @@
 From: Ricardo Salveti <ricardo.salveti@linaro.org>
-Subject: boards: nucleo_f401re: enable bluetooth SPI by default
+Subject: boards: 96b_carbon: enable bluetooth SPI by default
 
-Change-Id: Ie7704992ea609fec279c9649460502dd7d0c5c76
+Change-Id: I32dca5407aa9ec30063d9bc7d1e8ae00211d88c1
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
