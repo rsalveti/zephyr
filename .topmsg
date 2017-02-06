@@ -1,5 +1,8 @@
 From: Ricardo Salveti <ricardo.salveti@linaro.org>
-Subject: boards: 96b_carbon: enable bluetooth SPI by default
+Subject: arm: 96b_carbon: only enable SPI by default if BLUETOOTH is required
 
-Change-Id: I32dca5407aa9ec30063d9bc7d1e8ae00211d88c1
+Bluetooth will always require SPI, but don't enable it by default unless
+required by the user.
+
+Change-Id: Ie0e394e32f12a41da39d3f2d55b26de22589afc5
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
