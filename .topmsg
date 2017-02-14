@@ -1,8 +1,8 @@
 From: Ricardo Salveti <ricardo.salveti@linaro.org>
-Subject: boards: 96b_carbon_nrf51: use pin 29 as UART TX
+Subject: Bluetooth: HCI SPI: set RX BUF LEN to SPI MAX LEN
 
-Current SPI Bluetooth protocol only uses 5 wires, so just reuse the
-remaining pin as UART TX (easier to solder and to debug, when needed).
+CMD pool size depends on RX BUF LEN, so set that to the max length the
+driver is able to receive over SPI.
 
-Change-Id: Ib17832b54f4d66b21bf75c730f8db88a73bafc65
+Change-Id: Ib35e2220c20d12b30ac75ad8bd59d6e57a09b981
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>

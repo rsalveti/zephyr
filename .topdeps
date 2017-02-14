@@ -1,1 +1,1 @@
-t/arm-96b_carbon-only-enable-SPI-by-default-if-BLUETOOTH-is-required
+t/boards-96b_carbon_nrf51-use-pin-29-as-UART-TX
