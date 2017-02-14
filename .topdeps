@@ -1,1 +1,1 @@
-t/boards-96b_carbon-enable-bluetooth-SPI-by-default
+t/arm-96b_carbon-only-enable-SPI-by-default-if-BLUETOOTH-is-required
