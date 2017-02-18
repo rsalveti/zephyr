@@ -1,10 +1,12 @@
-From: Marti Bolivar <marti.bolivar@linaro.org>
-Subject: net/mqtt: fix race condition in mqtt_init()
+From: Michael Scott <michael.scott@linaro.org>
+Subject: net/mqtt: combine mqtt_parser for PUBLISHER and SUBSCRIBER
 
-We need to set the mqtt context recv function prior to calling
-net_context_recv which installs the mqtt_recv callback.
-If not, we risk a race condition where an unprotected reference
-to mqtt->rcv(mqtt, buf) is made in mqtt_recv().
+Currently, app type MQTT_APP_PUBLISHER_SUBSCRIBER is not supported.
+mqtt_init() will return EINVAL because the context rcv function is
+either mqtt_publisher_parser or mqtt_subscriber_parser (not both).
 
-Change-Id: If90ee58f4ea6f7879ef7c12b969ba27647426acc
-Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
+Let's combine these functions into mqtt_parser and remove the app
+type check from mqtt_init().
+
+Change-Id: I60460e011395864706e293c997e9f8a65681b368
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
