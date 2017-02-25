@@ -1,12 +1,20 @@
 From: Michael Scott <michael.scott@linaro.org>
-Subject: net/mqtt: combine mqtt_parser for PUBLISHER and SUBSCRIBER
+Subject: net/mqtt: use rlen to calculate # of QoS items in SUBACK packet
 
-Currently, app type MQTT_APP_PUBLISHER_SUBSCRIBER is not supported.
-mqtt_init() will return EINVAL because the context rcv function is
-either mqtt_publisher_parser or mqtt_subscriber_parser (not both).
+The data->len of an inbound netbuf can be larger than a single
+MQTT packet.  For instance when a PINGRESP is also included
+in the same netbuf.  For this reason we should not be using
+the data->len to determine how large the rest of the MQTT data is.
 
-Let's combine these functions into mqtt_parser and remove the app
-type check from mqtt_init().
+Specific Example: we've seen in testing that PINGRESP packets
+can be included with a SUBACK packet in the same netbuf. Under
+this case the current code uses the data->len incorrectly and
+tries to find 3 QoS elements for the SUBACK packet when there
+is only 1 (the rest of the data is for PINGRESP).
 
-Change-Id: I60460e011395864706e293c997e9f8a65681b368
+NOTE: A larger patch to iterate through the netbuf data parsing
+individual MQTT packets will be needed to fix the MQTT subsys.
+This patch only corrects the SUBACK parsing.
+
+Change-Id: I7f6cebaaed9570b778d466de84331cf8c5060755
 Signed-off-by: Michael Scott <michael.scott@linaro.org>
