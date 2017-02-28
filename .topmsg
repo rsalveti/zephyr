@@ -1,20 +1,21 @@
 From: Michael Scott <michael.scott@linaro.org>
-Subject: net/mqtt: use rlen to calculate # of QoS items in SUBACK packet
+Subject: net/mqtt: cleanup TX function unref handling
 
-The data->len of an inbound netbuf can be larger than a single
-MQTT packet.  For instance when a PINGRESP is also included
-in the same netbuf.  For this reason we should not be using
-the data->len to determine how large the rest of the MQTT data is.
+With CONFIG_NET_DEBUG_NET_BUF enabled, the log messages are full of errors
+regarding NULL parameters passed into net_buf_unref in almost every
+TX function for handling MQTT messages:
+mqtt_tx_connect()
+mqtt_tx_disconnect()
+mqtt_tx_pub_msgs()
+mqtt_tx_publish()
+mqtt_tx_pingreq()
+mqtt_tx_subscribe()
+mqtt_tx_unsubscribe()
+mqtt_parser()
 
-Specific Example: we've seen in testing that PINGRESP packets
-can be included with a SUBACK packet in the same netbuf. Under
-this case the current code uses the data->len incorrectly and
-tries to find 3 QoS elements for the SUBACK packet when there
-is only 1 (the rest of the data is for PINGRESP).
+Let's clean up the unref handling so that our debug log isn't quite
+so full of error spam (as opposed to the normal amount of spam from
+the net buf log).
 
-NOTE: A larger patch to iterate through the netbuf data parsing
-individual MQTT packets will be needed to fix the MQTT subsys.
-This patch only corrects the SUBACK parsing.
-
-Change-Id: I7f6cebaaed9570b778d466de84331cf8c5060755
+Change-Id: Ib49d1192f51abe4329e6dc9da3c51a4a36290082
 Signed-off-by: Michael Scott <michael.scott@linaro.org>
