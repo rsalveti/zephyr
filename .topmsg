@@ -1,0 +1,10 @@
+From: Marti Bolivar <marti.bolivar@linaro.org>
+Subject: net/mqtt: fix race condition in mqtt_init()
+
+We need to set the mqtt context recv function prior to calling
+net_context_recv which installs the mqtt_recv callback.
+If not, we risk a race condition where an unprotected reference
+to mqtt->rcv(mqtt, buf) is made in mqtt_recv().
+
+Change-Id: If90ee58f4ea6f7879ef7c12b969ba27647426acc
+Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
