@@ -1,1 +1,1 @@
-t/boards-96b_carbon_nrf51-use-pin-29-as-UART-TX
+t/Bluetooth-HCI-SPI-set-RX-BUF-LEN-to-SPI-MAX-LEN

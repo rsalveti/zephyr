@@ -1,8 +1,7 @@
-From: Ricardo Salveti <ricardo.salveti@linaro.org>
-Subject: Bluetooth: HCI SPI: set RX BUF LEN to SPI MAX LEN
+From: Marti Bolivar <marti.bolivar@linaro.org>
+Subject: sensor: add stub STM32F401x temperature driver
 
-CMD pool size depends on RX BUF LEN, so set that to the max length the
-driver is able to receive over SPI.
+The next patch will fill in the necessary functionality.
 
-Change-Id: Ib35e2220c20d12b30ac75ad8bd59d6e57a09b981
-Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+Change-Id: Ia5ddb77aba9f2448b366e391887ff33206f4f4ec
+Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
