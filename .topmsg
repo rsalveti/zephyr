@@ -1,7 +1,15 @@
 From: Marti Bolivar <marti.bolivar@linaro.org>
-Subject: sensor: add stub STM32F401x temperature driver
+Subject: drivers: sensor: add stm32f401x temperature driver
 
-The next patch will fill in the necessary functionality.
+There is an issue with this driver.
 
-Change-Id: Ia5ddb77aba9f2448b366e391887ff33206f4f4ec
+At present, there's no good way for board-level
+configuration (specifically, the voltages on the V_REF- and V_REF+
+external pins, which are needed to convert ADC values to volts) to be
+made available portably to drivers.
+
+Hack around this here by hard-coding reasonable defaults of 0V for
+V_REF- and 3.3V for V_REF+.
+
+Change-Id: I7f58cad83225e55d9d037f183d53962273f4c8e6
 Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
