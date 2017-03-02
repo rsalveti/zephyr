@@ -1,9 +1,8 @@
 From: Michael Scott <michael.scott@linaro.org>
-Subject: net/mqtt: cleanup TX function unref handling
+Subject: net/mqtt: return error codes from net_context_send
 
-With CONFIG_NET_DEBUG_NET_BUF enabled, the log messages are full of errors
-regarding NULL parameters passed into net_buf_unref in almost every
-TX function for handling MQTT messages:
+Instead of returning EIO let's bubble the error from net_context_send
+back up to the caller in the following functions:
 mqtt_tx_connect()
 mqtt_tx_disconnect()
 mqtt_tx_pub_msgs()
@@ -11,11 +10,6 @@ mqtt_tx_publish()
 mqtt_tx_pingreq()
 mqtt_tx_subscribe()
 mqtt_tx_unsubscribe()
-mqtt_parser()
 
-Let's clean up the unref handling so that our debug log isn't quite
-so full of error spam (as opposed to the normal amount of spam from
-the net buf log).
-
-Change-Id: Ib49d1192f51abe4329e6dc9da3c51a4a36290082
+Change-Id: I9bb4396b227b8902ac1195a97bc37eb1959b643e
 Signed-off-by: Michael Scott <michael.scott@linaro.org>
