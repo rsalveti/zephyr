@@ -1,6 +1,11 @@
 From: Amit Kucheria <amit.kucheria@linaro.org>
-Subject: defconfig: 96b_carbon: Enable the SPI driver by default
+Subject: drivers: spi: add nRF5 slave driver
 
-Change-Id: If9880d32424e812a2ce68698a458da03a7acdc42
+SPIS driver for nRF51 and nRF52 SoCs.
+
+Change-Id: I168ae2bf15a688f7035bddb43bb60d00dc614dfb
 Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
 Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
+Signed-off-by: Tyler Baker <tyler.baker@linaro.org>
+Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
