@@ -1,1 +1,1 @@
-t/drivers-sensor-add-stm32f401x-temperature-driver
+t/printk-add-missing-__printf_like-attributes

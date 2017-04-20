@@ -1,12 +1,12 @@
 From: Marti Bolivar <marti.bolivar@linaro.org>
-Subject: printk: add missing __printf_like attributes
+Subject: printk: add vprintk()
 
-GCC supports __attribute__((format (printf ...))) even when the
-variadic arguments are not present. In this case, the attribute
-argument specifying the start of the variadic arguments should be
-zero.
+This is needed by application code that wants to print formatted
+strings, but only has a fmt and va_list, and lacks memory to spare for
+"buf" and something like:
 
-Use this in printk.h to add __printf_like where it's missing.
+	 vsnprintk(buf, sizeof(buf), fmt, ap);
+	 printk("%s", buf);
 
-Change-Id: I7868439d5791e391aeb07356af9819524e68c771
+Change-Id: Ic9cc915ec7e5f8f9492c730667f39788ecae65f6
 Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
