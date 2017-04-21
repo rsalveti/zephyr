@@ -1,15 +1,12 @@
 From: Marti Bolivar <marti.bolivar@linaro.org>
-Subject: drivers: sensor: add stm32f401x temperature driver
+Subject: printk: add missing __printf_like attributes
 
-There is an issue with this driver.
+GCC supports __attribute__((format (printf ...))) even when the
+variadic arguments are not present. In this case, the attribute
+argument specifying the start of the variadic arguments should be
+zero.
 
-At present, there's no good way for board-level
-configuration (specifically, the voltages on the V_REF- and V_REF+
-external pins, which are needed to convert ADC values to volts) to be
-made available portably to drivers.
+Use this in printk.h to add __printf_like where it's missing.
 
-Hack around this here by hard-coding reasonable defaults of 0V for
-V_REF- and 3.3V for V_REF+.
-
-Change-Id: I7f58cad83225e55d9d037f183d53962273f4c8e6
+Change-Id: I7868439d5791e391aeb07356af9819524e68c771
 Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
