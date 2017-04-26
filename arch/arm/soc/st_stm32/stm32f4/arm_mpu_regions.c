@@ -12,6 +12,13 @@
 /* SoC Private Peripheral Bus */
 #define PPB_BASE  0xE0000000
 
+/*
+ * SoC base of system memory.
+ *
+ * After this area, the device UID and option bytes follow.
+ */
+#define SM_BASE		0x1FFF0000
+
 static struct arm_mpu_region mpu_regions[] = {
 	/* Region 0 */
 	MPU_REGION_ENTRY("FLASH_0",
@@ -33,8 +40,12 @@ static struct arm_mpu_region mpu_regions[] = {
 	MPU_REGION_ENTRY("PPB_0",
 			 PPB_BASE,
 			 REGION_PPB_ATTR(REGION_256M)),
-#if defined(CONFIG_BL_APPLICATION)
 	/* Region 5 */
+	MPU_REGION_ENTRY("SM_UID_OB",
+			 SM_BASE,
+			 REGION_RAM_ATTR(REGION_64K)),
+#if defined(CONFIG_BL_APPLICATION)
+	/* Region 6 */
 	/*
 	 * The application booting from a bootloader has no access to the
 	 * bootloader region. This behavior can be changed at runtime by
