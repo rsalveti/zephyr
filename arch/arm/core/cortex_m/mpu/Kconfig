@@ -13,3 +13,10 @@ config ARM_MPU
 	default n
 	help
 	  MCU has ARM MPU
+
+config ARM_MPU_ALLOW_FLASH_WRITE
+	bool "Add ARM MPU access to write to flash"
+	depends on ARM_MPU
+	default n
+	help
+	  Enable this to allow MPU RW access to flash memory
