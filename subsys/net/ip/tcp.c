@@ -716,6 +716,9 @@ int net_tcp_send_pkt(struct net_pkt *pkt)
 
 		if (pkt_in_slist) {
 			new_pkt = net_pkt_get_tx(ctx, K_FOREVER);
+			if (!new_pkt) {
+				return -ENOMEM;
+			}
 
 			memcpy(new_pkt, pkt, sizeof(struct net_pkt));
 			new_pkt->frags = net_pkt_copy_all(pkt, 0, K_FOREVER);
