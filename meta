@@ -1,6 +1,27 @@
 Version: 1
-Previous: None
-Head: 8dd2a35c307e50ac072e446a6ed7bf0c1bc8c661
+Previous: 799021c657e924c9dcc2577777e23e4da24f9ab3
+Head: f046549f72eada76d493daed507eaba03de1d238
 Applied:
+  0001-tcp-check-net_pkt_get_tx-for-NULL-in-net_tcp_send_pk.patch: 970af04aff3fd535a0a52368164b73b5d9687e1a
+  0002-arm-core-mpu-Add-CONFIG-to-allow-RW-access-to-flash.patch: 34e7591f5740e3970c7599217f5c0f6536819d81
+  0003-arm-mpu-stm32f4-add-memory-region-for-sys-mem-and-op.patch: 75c592eae572363a90be673cf037c5b2cac25316
+  0004-pinmux-stm32f4-Setup-SPI-pins.patch: 93ae9ee8e4e99cd606355507ebf5ad0f431c76f2
+  0005-pinmux-nucleo_f401re-Setup-SPI-pins-on-the-board.patch: 74edcecfe92ba04f6f9fa67985d3380806867cf6
+  0006-pinmux-96b_carbon-Setup-SPI-pins-on-the-board.patch: 7948423b599d7439e6060106e5930bac280b1e7c
+  0007-drivers-spi-Add-STM32f4-SPI-driver.patch: 9f7fd75531fd3fbc169b2b6af53c55fbcb99bf8f
+  0008-drivers-spi-fix-location-of-syslog.h.patch: 56d16738b125e3c2b22fba738d60906835a17931
+  0009-defconfig-nucleo_f401re-Enable-the-SPI-driver-by-def.patch: c0e8b37670f075446c6ba70c4a486ece9106bdb7
+  0010-defconfig-96b_carbon-Enable-the-SPI-driver-by-defaul.patch: f7102ebfa2174139cabb902d6f318d5fef7712d5
+  0011-drivers-spi-add-nRF5-slave-driver.patch: 1a9482dd6e0f050faf6e95d438d1050f801ead7e
+  0012-boards-96b_carbon_nrf51-add-support-for-96Boards-Car.patch: 0329917f82ae92cb0827f988c5bee3cf6c6cc3d4
+  0013-cortex_m-reset.S-add-reset-workaround-for-NRF51822.patch: 018f7e11412088ca253401ffc03c60e3339498a4
+  0014-Bluetooth-Add-HCI-SPI-raw-handler-sample.patch: a57e73688392d7b1d50032e3bde668de2e6314c3
+  0015-boards-nucleo_f401re-enable-bluetooth-SPI-by-default.patch: 7d16977525d58427c61c48c571e05b11b2abc7de
+  0016-boards-96b_carbon-enable-bluetooth-SPI-by-default.patch: 7d723bcee706c2cfc46f2b4981b0f2c62ff1269e
+  0017-arm-96b_carbon-only-enable-SPI-by-default-if-BLUETOO.patch: dba0ef186b002507d0806faf9dbedbe36b06dc12
+  0018-boards-96b_carbon_nrf51-use-pin-29-as-UART-TX.patch: 2acc0bff244bdd1767d53b6829b3c8de6aaa5233
+  0019-Bluetooth-HCI-SPI-set-RX-BUF-LEN-to-SPI-MAX-LEN.patch: fd0e4f8e5b161a47c5bdf52cd05ee0ff823fcfeb
+  0020-sensor-add-stub-STM32F401x-temperature-driver.patch: 7c70706cd92551400456d126b10016a866c41e93
+  0021-drivers-sensor-add-stm32f401x-temperature-driver.patch: f046549f72eada76d493daed507eaba03de1d238
 Unapplied:
 Hidden:

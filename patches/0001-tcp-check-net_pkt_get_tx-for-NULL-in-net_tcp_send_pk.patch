@@ -1,0 +1,38 @@
+Bottom: e7ea9ad7740d343ac26a3950156451c421def14c
+Top:    3af9e0d9b86af9ae9e2b375c4a38de23fd5226e0
+Author: Michael Scott <michael.scott@linaro.org>
+Date:   2017-04-27 23:26:32 -0700
+
+From bb9c34b650677639cbab20592ad66329b7fa9dc2 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 01/21] tcp: check net_pkt_get_tx() for NULL in
+ net_tcp_send_pkt()
+
+If app is starved for TX buffers possibly due to triggering
+tcp_retry_expired() over and over, we can see net_pkt_get_tx()
+in net_tcp_send_pkt() return NULL (even though the timeout
+is set to K_FOREVER).
+
+Let's return a -ENOMEM if we get a NULL for this allocation
+before we hit the memcpy below which would do bad things to
+memory.
+
+Change-Id: I3095b198d2fdec836c797d1e1eebdbf890dac1ad
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
+
+
+---
+
+diff --git a/subsys/net/ip/tcp.c b/subsys/net/ip/tcp.c
+index eaa77a237..773b1563e 100644
+--- a/subsys/net/ip/tcp.c
++++ b/subsys/net/ip/tcp.c
+@@ -716,6 +716,9 @@ int net_tcp_send_pkt(struct net_pkt *pkt)
+ 
+ 		if (pkt_in_slist) {
+ 			new_pkt = net_pkt_get_tx(ctx, K_FOREVER);
++			if (!new_pkt) {
++				return -ENOMEM;
++			}
+ 
+ 			memcpy(new_pkt, pkt, sizeof(struct net_pkt));
+ 			new_pkt->frags = net_pkt_copy_all(pkt, 0, K_FOREVER);

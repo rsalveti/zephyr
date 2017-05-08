@@ -1,0 +1,51 @@
+Bottom: 3af9e0d9b86af9ae9e2b375c4a38de23fd5226e0
+Top:    08ff4a29fbcf832a998e2dae977853b9c6c17971
+Author: Michael Scott <michael.scott@linaro.org>
+Date:   2017-04-26 15:15:08 -0700
+
+From 14af77b21ce54e10a0c62139c988271f48776b23 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 02/21] arm: core: mpu: Add CONFIG to allow RW access to flash
+
+The ARM MPU configures the entire flash as RO.  However, some
+apps will need to write to flash and for this purpose add a CONFIG
+to change the flash memory from RO to P_RW_U_RO.
+
+Change-Id: Ia924ba0ae4dd5c8223928fd8fdc8367a0cef6a43
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
+
+
+---
+
+diff --git a/arch/arm/core/cortex_m/mpu/Kconfig b/arch/arm/core/cortex_m/mpu/Kconfig
+index 892a242ad..6baf5fb8d 100644
+--- a/arch/arm/core/cortex_m/mpu/Kconfig
++++ b/arch/arm/core/cortex_m/mpu/Kconfig
+@@ -13,3 +13,10 @@ config ARM_MPU
+ 	default n
+ 	help
+ 	  MCU has ARM MPU
++
++config ARM_MPU_ALLOW_FLASH_WRITE
++	bool "Add ARM MPU access to write to flash"
++	depends on ARM_MPU
++	default n
++	help
++	  Enable this to allow MPU RW access to flash memory
+diff --git a/include/arch/arm/cortex_m/mpu/arm_mpu.h b/include/arch/arm/cortex_m/mpu/arm_mpu.h
+index e35f5d41a..77db257b5 100644
+--- a/include/arch/arm/cortex_m/mpu/arm_mpu.h
++++ b/include/arch/arm/cortex_m/mpu/arm_mpu.h
+@@ -76,8 +76,14 @@ struct arm_mpu {
+ #define REGION_RAM_ATTR(size) \
+ 		(NORMAL_OUTER_INNER_NON_CACHEABLE_NON_SHAREABLE | \
+ 		 NOT_EXEC | size | FULL_ACCESS)
++#ifdef CONFIG_ARM_MPU_ALLOW_FLASH_WRITE
++#define REGION_FLASH_ATTR(size) \
++		(NORMAL_OUTER_INNER_NON_CACHEABLE_NON_SHAREABLE | size | \
++		 P_RW_U_RO)
++#else
+ #define REGION_FLASH_ATTR(size) \
+ 		(NORMAL_OUTER_INNER_NON_CACHEABLE_NON_SHAREABLE | size | RO)
++#endif
+ #define REGION_PPB_ATTR(size) (STRONGLY_ORDERED_SHAREABLE | size | FULL_ACCESS)
+ #define REGION_IO_ATTR(size) (DEVICE_NON_SHAREABLE | size | FULL_ACCESS)

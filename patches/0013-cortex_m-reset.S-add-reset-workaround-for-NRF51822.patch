@@ -1,0 +1,45 @@
+Bottom: 06b63c25ea7eaba03b26b6e5ce9039aa9a31aff4
+Top:    9cbf0d17bbedde6f76f74b1daf4288275057b18b
+Author: Ricardo Salveti <ricardo.salveti@linaro.org>
+Date:   2016-08-26 01:09:12 -0300
+
+From 031b94d3766ee3e2d1558c832cb4a25827d4c6d9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 13/21] cortex_m/reset.S: add reset workaround for NRF51822
+
+Change-Id: Idf6f4a0262ff20b79891152a630bfb45ef14a5d0
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+
+
+---
+
+diff --git a/arch/arm/core/cortex_m/reset.S b/arch/arm/core/cortex_m/reset.S
+index d586d2c79..14471b74d 100644
+--- a/arch/arm/core/cortex_m/reset.S
++++ b/arch/arm/core/cortex_m/reset.S
+@@ -57,6 +57,25 @@ SECTION_SUBSEC_FUNC(TEXT,_reset_section,__reset)
+  */
+ SECTION_SUBSEC_FUNC(TEXT,_reset_section,__start)
+ 
++#if defined(CONFIG_SOC_SERIES_NRF51X)
++    /* Make sure to enable all banks via the RAMON register.
++     * nF51822 Product Anomaly Notice (PAN) #16
++     */
++    /* ROM A */
++    ldr r0, =0x40000524
++    ldr r2, [r0]
++    movs r1, #0x3
++    orrs r2, r2, r1
++    str r2, [r0]
++
++    /* ROM B */
++    ldr r0, =0x40000554
++    ldr r2, [r0]
++    movs r1, #0x3
++    orrs r2, r2, r1
++    str r2, [r0]
++#endif
++
+     /* lock interrupts: will get unlocked when switch to main task */
+ #if defined(CONFIG_ARMV6_M)
+     cpsid i

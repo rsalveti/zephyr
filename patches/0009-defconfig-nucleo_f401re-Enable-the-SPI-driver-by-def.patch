@@ -1,0 +1,29 @@
+Bottom: 632102c64287e8c07e5e0605754ad106a3775afe
+Top:    efc9bda2fb38b38318fa2a2d4c874aab147d47cb
+Author: Amit Kucheria <amit.kucheria@linaro.org>
+Date:   2016-09-13 11:51:21 +0530
+
+From ccd77a8e0bdb54f9f6e7d10001695cb9b8ff9d20 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 09/21] defconfig: nucleo_f401re: Enable the SPI driver by
+ default
+
+Change-Id: I8554d0b39af3b4e01495d687a35cd6c143fbd9c7
+Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+
+
+---
+
+diff --git a/boards/arm/nucleo_f401re/nucleo_f401re_defconfig b/boards/arm/nucleo_f401re/nucleo_f401re_defconfig
+index 76e8b981f..b35188a9a 100644
+--- a/boards/arm/nucleo_f401re/nucleo_f401re_defconfig
++++ b/boards/arm/nucleo_f401re/nucleo_f401re_defconfig
+@@ -17,6 +17,9 @@ CONFIG_UART_CONSOLE_ON_DEV_NAME="UART_2"
+ # enable pinmux
+ CONFIG_PINMUX=y
+ 
++# enable SPI
++CONFIG_SPI=y
++
+ # enable GPIO ports A, B, C
+ CONFIG_GPIO=y

@@ -1,0 +1,129 @@
+Bottom: 7ee2eef042d86f3336821be6a80b6029495ae8c9
+Top:    10db01863ad3297d693d09e54af846263913c4ff
+Author: Marti Bolivar <marti.bolivar@linaro.org>
+Date:   2017-03-01 17:32:37 -0500
+
+From f23db05e476e1d9cf6025d10398d80e4f908b572 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 20/21] sensor: add stub STM32F401x temperature driver
+
+The next patch will fill in the necessary functionality.
+
+Change-Id: Ia5ddb77aba9f2448b366e391887ff33206f4f4ec
+Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
+
+
+---
+
+diff --git a/drivers/sensor/Kconfig b/drivers/sensor/Kconfig
+index 7f2448718..4b43ab960 100644
+--- a/drivers/sensor/Kconfig
++++ b/drivers/sensor/Kconfig
+@@ -101,3 +101,5 @@ source "drivers/sensor/th02/Kconfig"
+ source "drivers/sensor/tmp007/Kconfig"
+ 
+ source "drivers/sensor/tmp112/Kconfig"
++
++source "drivers/sensor/stm32/Kconfig"
+diff --git a/drivers/sensor/Makefile b/drivers/sensor/Makefile
+index 814a555de..b17e6fb66 100644
+--- a/drivers/sensor/Makefile
++++ b/drivers/sensor/Makefile
+@@ -31,3 +31,4 @@ obj-$(CONFIG_SX9500) += sx9500/
+ obj-$(CONFIG_TH02) += th02/
+ obj-$(CONFIG_TMP007) += tmp007/
+ obj-$(CONFIG_TMP112) += tmp112/
++obj-$(CONFIG_TEMP_STM32F401X) += stm32/
+diff --git a/drivers/sensor/stm32/Kconfig b/drivers/sensor/stm32/Kconfig
+new file mode 100644
+index 000000000..f62b8a8be
+--- /dev/null
++++ b/drivers/sensor/stm32/Kconfig
+@@ -0,0 +1,24 @@
++# Kconfig - STM32F401x temperature sensor configuration options
++
++#
++# Copyright (c) 2016 ARM Ltd.
++# Copyright (c) 2017 Linaro Limited.
++#
++# SPDX-License-Identifier: Apache-2.0
++#
++
++menuconfig TEMP_STM32F401X
++	bool
++	prompt "STM32F401x Temperature Sensor"
++	depends on SENSOR && SOC_SERIES_STM32F4X
++	default n
++	help
++	  Enable driver for STM32F401x temperature sensor.
++
++config TEMP_STM32F401X_NAME
++	string
++	prompt "Driver name"
++	default "TEMP_0"
++	depends on TEMP_STM32F401X
++	help
++	  Device name with which the STM32F401x temperature sensor is identified.
+diff --git a/drivers/sensor/stm32/Makefile b/drivers/sensor/stm32/Makefile
+new file mode 100644
+index 000000000..b88ece577
+--- /dev/null
++++ b/drivers/sensor/stm32/Makefile
+@@ -0,0 +1 @@
++obj-$(CONFIG_TEMP_STM32F401X) += temp_stm32f401x.o
+diff --git a/drivers/sensor/stm32/temp_stm32f401x.c b/drivers/sensor/stm32/temp_stm32f401x.c
+new file mode 100644
+index 000000000..8479a3a1f
+--- /dev/null
++++ b/drivers/sensor/stm32/temp_stm32f401x.c
+@@ -0,0 +1,51 @@
++/*
++ * Copyright (c) 2017 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/**
++ * @file
++ * @brief Temperature sensor driver for STM32F401x chips.
++ *
++ * @warning Temperature readings should be use for RELATIVE
++ *          TEMPERATURE CHANGES ONLY.
++ *
++ *          Inter-chip temperature sensor readings may vary by as much
++ *          as 45 degrees C.
++ */
++
++#include <device.h>
++#include <sensor.h>
++
++/* TODO */
++static int temp_stm32f401x_sample_fetch(struct device *dev,
++					enum sensor_channel chan)
++{
++	return 0;
++}
++
++/* TODO */
++static int temp_stm32f401x_channel_get(struct device *dev,
++				       enum sensor_channel chan,
++				       struct sensor_value *val)
++{
++	val->val1 = 0;
++	val->val2 = 0;
++	return 0;
++}
++
++static const struct sensor_driver_api temp_stm32f401x_driver_api = {
++	.sample_fetch = temp_stm32f401x_sample_fetch,
++	.channel_get = temp_stm32f401x_channel_get,
++};
++
++/* TODO */
++static int temp_stm32f401x_init(struct device *dev)
++{
++	return 0;
++}
++
++DEVICE_AND_API_INIT(temp_stm32f401x, CONFIG_TEMP_STM32F401X_NAME,
++		    temp_stm32f401x_init, NULL, NULL, POST_KERNEL,
++		    CONFIG_SENSOR_INIT_PRIORITY, &temp_stm32f401x_driver_api);

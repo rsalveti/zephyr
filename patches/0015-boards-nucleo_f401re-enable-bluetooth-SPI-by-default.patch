@@ -1,0 +1,32 @@
+Bottom: d64ac212244590b34766b2c9bab8eadf328f3821
+Top:    d99443696031a041253553411dd3a250c228da24
+Author: Ricardo Salveti <ricardo.salveti@linaro.org>
+Date:   2017-01-25 21:57:37 -0200
+
+From ce2c7d37ffba1d496c0d45db42fa67f87d2cc30d Mon Sep 17 00:00:00 2001
+Subject: [PATCH 15/21] boards: nucleo_f401re: enable bluetooth SPI by default
+
+Change-Id: Ie7704992ea609fec279c9649460502dd7d0c5c76
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+
+
+---
+
+diff --git a/boards/arm/nucleo_f401re/nucleo_f401re_defconfig b/boards/arm/nucleo_f401re/nucleo_f401re_defconfig
+index b35188a9a..2ee17dd45 100644
+--- a/boards/arm/nucleo_f401re/nucleo_f401re_defconfig
++++ b/boards/arm/nucleo_f401re/nucleo_f401re_defconfig
+@@ -45,5 +45,13 @@ CONFIG_PWM=y
+ CONFIG_PWM_STM32=y
+ CONFIG_PWM_STM32_2=y
+ 
++# Bluetooth (over SPI)
++CONFIG_BLUETOOTH_SPI=y
++CONFIG_BLUETOOTH_SPI_IRQ_DEV_NAME="GPIOB"
++CONFIG_BLUETOOTH_SPI_IRQ_PIN=0
++CONFIG_BLUETOOTH_SPI_RESET_DEV_NAME="GPIOB"
++CONFIG_BLUETOOTH_SPI_RESET_PIN=1
++CONFIG_BLUETOOTH_SPI_MAX_CLK_FREQ=2000000
++
+ #enable DTS
+ CONFIG_HAS_DTS=y

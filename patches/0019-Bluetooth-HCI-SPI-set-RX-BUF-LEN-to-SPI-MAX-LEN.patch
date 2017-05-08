@@ -1,0 +1,41 @@
+Bottom: eeb2eb6a22664647e2d8a7074ecb07c3de769f8e
+Top:    7ee2eef042d86f3336821be6a80b6029495ae8c9
+Author: Ricardo Salveti <ricardo.salveti@linaro.org>
+Date:   2017-02-14 17:30:01 -0200
+
+From cfca2c18d71fad224cb46fba5f17671f5f5d378e Mon Sep 17 00:00:00 2001
+Subject: [PATCH 19/21] Bluetooth: HCI SPI: set RX BUF LEN to SPI MAX LEN
+
+CMD pool size depends on RX BUF LEN, so set that to the max length the
+driver is able to receive over SPI.
+
+Change-Id: Ib35e2220c20d12b30ac75ad8bd59d6e57a09b981
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+
+
+---
+
+diff --git a/samples/bluetooth/hci_spi/96b_carbon_nrf51.conf b/samples/bluetooth/hci_spi/96b_carbon_nrf51.conf
+index 2caaa2702..01abc08ff 100644
+--- a/samples/bluetooth/hci_spi/96b_carbon_nrf51.conf
++++ b/samples/bluetooth/hci_spi/96b_carbon_nrf51.conf
+@@ -8,6 +8,7 @@ CONFIG_BLUETOOTH_TINYCRYPT_ECC=n
+ CONFIG_BLUETOOTH_SPI_TO_HOST_DEV_NAME="SPI_1"
+ CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_DEV_NAME="GPIO_0"
+ CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_PIN=28
++CONFIG_BLUETOOTH_RX_BUF_LEN=255
+ 
+ # Debug
+ CONFIG_SYS_LOG=y
+diff --git a/samples/bluetooth/hci_spi/nrf51_pca10028.conf b/samples/bluetooth/hci_spi/nrf51_pca10028.conf
+index 9bc913bab..f31612650 100644
+--- a/samples/bluetooth/hci_spi/nrf51_pca10028.conf
++++ b/samples/bluetooth/hci_spi/nrf51_pca10028.conf
+@@ -8,6 +8,7 @@ CONFIG_BLUETOOTH_TINYCRYPT_ECC=n
+ CONFIG_BLUETOOTH_SPI_TO_HOST_DEV_NAME="SPI_1"
+ CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_DEV_NAME="GPIO_0"
+ CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_PIN=22
++CONFIG_BLUETOOTH_RX_BUF_LEN=255
+ 
+ # Debug
+ CONFIG_SYS_LOG=y

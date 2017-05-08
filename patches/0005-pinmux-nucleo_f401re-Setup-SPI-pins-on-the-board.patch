@@ -1,0 +1,31 @@
+Bottom: c3fcce6f66c08266dbad5771533e16aec42b7660
+Top:    62ab781e69bf98ac3a31bd51594adfb5e60693c2
+Author: Amit Kucheria <amit.kucheria@linaro.org>
+Date:   2016-09-13 11:36:55 +0530
+
+From a93247697fe912423099d55af7eeae2c06184544 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 05/21] pinmux: nucleo_f401re: Setup SPI pins on the board
+
+Change-Id: Id2febfa4eac9fd9cc611f43919d2ff2c0c4b4e65
+Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+
+
+---
+
+diff --git a/drivers/pinmux/stm32/pinmux_board_nucleo_f401re.c b/drivers/pinmux/stm32/pinmux_board_nucleo_f401re.c
+index 9314bf7b7..e5567858b 100644
+--- a/drivers/pinmux/stm32/pinmux_board_nucleo_f401re.c
++++ b/drivers/pinmux/stm32/pinmux_board_nucleo_f401re.c
+@@ -26,6 +26,12 @@ static const struct pin_config pinconf[] = {
+ #ifdef CONFIG_PWM_STM32_2
+ 	{STM32_PIN_PA0, STM32F4_PINMUX_FUNC_PA0_PWM2_CH1},
+ #endif /* CONFIG_PWM_STM32_2 */
++#ifdef CONFIG_SPI_0
++	{STM32_PIN_PA4, STM32F4_PINMUX_FUNC_PA4_SPI1_NSS},
++	{STM32_PIN_PA5, STM32F4_PINMUX_FUNC_PA5_SPI1_SCK},
++	{STM32_PIN_PA6, STM32F4_PINMUX_FUNC_PA6_SPI1_MISO},
++	{STM32_PIN_PA7, STM32F4_PINMUX_FUNC_PA7_SPI1_MOSI},
++#endif	/* CONFIG_SPI_0 */
+ };
+ 
+ static int pinmux_stm32_init(struct device *port)

@@ -1,0 +1,1095 @@
+Bottom: 21f3d60083bdf38fa71ed526586caa0855fc70d3
+Top:    646570b0d001043cffa36d4ba97b2b5018e3ff69
+Author: Amit Kucheria <amit.kucheria@linaro.org>
+Date:   2016-09-13 11:44:42 +0530
+
+From 8e819641e59a9ad7cde8b3df2f4deac99053a81a Mon Sep 17 00:00:00 2001
+Subject: [PATCH 07/21] drivers: spi: Add STM32f4 SPI driver
+
+This driver is capable of Master and Slave mode, default being
+Master-mode. Slave mode requires CONFIG_SPI_SLAVE to be set.
+
+Change-Id: Idc35900ade22d92fc5d0fd5a799068dec1c9449f
+Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
+
+
+---
+
+diff --git a/arch/arm/soc/st_stm32/stm32f4/Kconfig.defconfig.series b/arch/arm/soc/st_stm32/stm32f4/Kconfig.defconfig.series
+index f25719859..e748d8f26 100644
+--- a/arch/arm/soc/st_stm32/stm32f4/Kconfig.defconfig.series
++++ b/arch/arm/soc/st_stm32/stm32f4/Kconfig.defconfig.series
+@@ -70,4 +70,23 @@ config PINMUX_STM32
+ 
+ endif #PINMUX
+ 
++if SPI
++
++config SPI_STM32
++	def_bool y
++
++config SPI_0
++	def_bool y
++
++config SPI_1
++	def_bool y
++
++config SPI_0_IRQ_PRI
++	default 5
++
++config SPI_1_IRQ_PRI
++	default 5
++
++endif #SPI
++
+ endif # SOC_SERIES_STM32F4X
+diff --git a/drivers/spi/Kconfig b/drivers/spi/Kconfig
+index ba4ae112b..f8e93da02 100644
+--- a/drivers/spi/Kconfig
++++ b/drivers/spi/Kconfig
+@@ -33,6 +33,14 @@ config SPI_QMSI_SS
+ 	  SPI driver implementation using QMSI library. This instance is
+ 	  for the Sensor Subsystem.
+ 
++config SPI_STM32
++	bool
++	prompt "STMicroelectronics STM32Fx SPI controller driver"
++	depends on SPI && SOC_FAMILY_STM32
++	default n
++	help
++	  Enable support for STMicroelectronics STM32Fx SPI controllers.
++
+ config SPI_INTEL
+ 	bool
+ 	prompt "Intel SPI controller driver"
+diff --git a/drivers/spi/Makefile b/drivers/spi/Makefile
+index 8cf7468c0..9caf9fe6f 100644
+--- a/drivers/spi/Makefile
++++ b/drivers/spi/Makefile
+@@ -4,3 +4,4 @@ obj-$(CONFIG_SPI_MCUX_DSPI) += spi_mcux_dspi.o
+ obj-$(CONFIG_SPIM_NRF52) += spim_nrf52.o
+ obj-$(CONFIG_SPI_QMSI) += spi_qmsi.o
+ obj-$(CONFIG_SPI_QMSI_SS) += spi_qmsi_ss.o
++obj-$(CONFIG_SPI_STM32) += spi_stm32.o
+diff --git a/drivers/spi/spi_stm32.c b/drivers/spi/spi_stm32.c
+new file mode 100644
+index 000000000..258f5c49c
+--- /dev/null
++++ b/drivers/spi/spi_stm32.c
+@@ -0,0 +1,700 @@
++/* spi_stm32.c - Driver implementation for STM32 SPI controller */
++
++/*
++ * Copyright (c) 2016 Linaro Limited.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ *
++ */
++
++#define SYS_LOG_LEVEL CONFIG_SYS_LOG_SPI_LEVEL
++#include <misc/sys_log.h>
++#include <misc/printk.h>
++#include <misc/__assert.h>
++
++#include <board.h>
++#include <errno.h>
++
++#include <clock_control/stm32_clock_control.h>
++
++#include <spi.h>
++#include <spi/spi_stm32.h>
++#include "spi_stm32_priv.h"
++
++/* convenience defines */
++#define DEV_CFG(dev)	\
++	((const struct spi_stm32_config * const)(dev)->config->config_info)
++#define DEV_DATA(dev)	\
++	((struct spi_stm32_data * const)(dev)->driver_data)
++#define SPI_REGS(dev)	\
++	((volatile struct spi_stm32 *)(DEV_CFG(dev))->base_addr)
++
++/* # of possible SPI baud rate scaler values */
++#define SPI_STM32_NUM_SCALERS 8
++
++/* SPI baud rate scaler values, programmed in SPI_CR1[BR] */
++static const u32_t baud_rate_scaler[SPI_STM32_NUM_SCALERS] = {
++	2, 4, 8, 16, 32, 64, 128, 256
++};
++
++struct pending_transfer {
++	struct device *dev;
++};
++static struct pending_transfer pending_transfers[4];
++
++static const u32_t tx_padding = 0x55;
++
++static void spi_stm32_enable_irq(struct device *dev, u16_t flags)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++
++	spi_regs->cr2.val |= flags;
++}
++
++static void spi_stm32_disable_irq(struct device *dev, u16_t flags)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++
++	spi_regs->cr2.val &= ~flags;
++}
++
++static int spi_stm32_tx_empty(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++
++	return spi_regs->sr.bit.txe;
++}
++
++static int spi_stm32_rx_not_empty(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++
++	return spi_regs->sr.bit.rxne;
++}
++
++static void spi_stm32_rx_quiesce(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++	u16_t tmp;
++
++	while (spi_stm32_rx_not_empty(dev)) {
++		/* read the register to clear it */
++		tmp = spi_regs->dr;
++	}
++	/* RX buffer is empty now */
++}
++
++static void spi_stm32_quiesce(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++
++	spi_stm32_rx_quiesce(dev);
++	/* RX/TX buffers empty now */
++	while (spi_regs->sr.bit.bsy) {
++		/* Twiddle thumbs */
++
++		/* FIXME: Add a timeout? */
++	}
++	/* SPI is not busy now */
++}
++
++/**
++ * @brief Stop SPI module operation.
++ * @param dev Pointer to the device structure for the driver instance
++ * @return None.
++ */
++static inline void spi_stm32_stop(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++
++	/* Ensure module operation is stopped as per Section 20.3.8 */
++	SYS_LOG_DBG("Prepare to stop");
++	spi_stm32_quiesce(dev);
++
++	spi_regs->cr1.bit.spe = SPI_STM32_CR1_DISABLE;
++}
++
++/**
++ * @brief Enable SPI module operation.
++ * @param dev Pointer to the device structure for the driver instance
++ * @return None.
++ */
++static inline void spi_stm32_start(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++
++	/* Allow module operation */
++	spi_regs->cr1.bit.spe = SPI_STM32_CR1_ENABLE;
++}
++
++static void spi_stm32_show_cr(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++
++	__attribute((__unused__)) int p = spi_regs->cr1.val;
++	__attribute((__unused__)) int q = spi_regs->cr2.val;
++
++	SYS_LOG_DBG("cr1: %x [br: %u, sw slave mgmt(ssm): %u, ssi (sw-only on "
++		    "master): %u, mstr: %u]\ncr2: %x [ssoe (master-only): %u]",
++		    p, spi_regs->cr1.bit.br, spi_regs->cr1.bit.ssm,
++		    spi_regs->cr1.bit.ssi, spi_regs->cr1.bit.mstr,
++		    q, spi_regs->cr2.bit.ssoe);
++}
++
++static void spi_stm32_show_status(struct device *dev, char *fn)
++{
++	__attribute((__unused__)) volatile struct spi_stm32 *spi_regs;
++
++	spi_regs = SPI_REGS(dev);
++
++	SYS_LOG_DBG("%s: show_status: %x", fn, spi_regs->sr.val);
++	SYS_LOG_DBG("%s: txe: %u, rxne: %u, ovr: %u, modf: %u, "
++		    "bsy: %u, fre: %u", fn,
++		    spi_regs->sr.bit.txe,
++		    spi_regs->sr.bit.rxne,
++		    spi_regs->sr.bit.ovr,
++		    spi_regs->sr.bit.modf,
++		    spi_regs->sr.bit.bsy,
++		    spi_regs->sr.bit.fre);
++}
++
++static void spi_stm32_clear_errors(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++	u32_t status = spi_regs->sr.val;
++	u32_t tmp;
++
++	if (status & SPI_STM32_SR_OVERRUN) {
++		SYS_LOG_ERR("Overrun error detected. Trying to recover.");
++		tmp = spi_regs->dr;
++		tmp = spi_regs->sr.val;
++	}
++
++	if (status & SPI_STM32_SR_MODE_ERROR) {
++		SYS_LOG_ERR("MODF error detected. Trying to recover.");
++		if (priv_data->mode == SPI_STM32_MASTER_MODE) {
++			spi_regs->cr1.bit.mstr = 1;
++			SYS_LOG_DBG("Restoring master mode");
++		} else if (priv_data->mode == SPI_STM32_SLAVE_MODE) {
++			spi_regs->cr1.bit.mstr = 0;
++			SYS_LOG_DBG("Restoring slave mode");
++		}
++	}
++
++	if (status & SPI_STM32_SR_CRC_ERROR) {
++		SYS_LOG_ERR("CRC error detected. Trying to recover.");
++		/* TODO: Fill up recovery process */
++	}
++
++	status = spi_regs->sr.val;
++
++	if (status & (SPI_STM32_SR_OVERRUN | SPI_STM32_SR_MODE_ERROR |
++		      SPI_STM32_SR_CRC_ERROR)) {
++		SYS_LOG_ERR("Error still persists, system might be unstable");
++	}
++}
++
++/**
++ * @brief Set a SPI baud rate nearest to the desired rate, without exceeding it.
++ * @param dev Pointer to the device structure for the driver instance
++ * @param req_baud The desired baud rate.
++ *
++ * @return An index into the baud_rate_scaler table or an error code
++ */
++static u32_t spi_stm32_set_baud_rate(struct device *dev, u32_t req_baud)
++{
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++	const struct spi_stm32_config *cfg = DEV_CFG(dev);
++	u32_t clock;
++	u32_t div;
++	u32_t i;
++
++	/* This uses a simple function that doesn't try to hard to change
++	 * the parent clock divider to make a closer match to the requested
++	 * baudrate. It is left to the user to change the value of PCLK1/PCLK2.
++	 */
++#if CONFIG_SOC_SERIES_STM32F4X
++	clock_control_get_rate(priv_data->clock,
++			(clock_control_subsys_t *) &cfg->pclken, &clock);
++#else
++	SYS_LOG_ERR("Unknown clock setup for the SPI device. Aborting.");
++	return -ENOTSUP;
++#endif
++	/* Baud rate calculations
++	 *
++	 * Desired SPI baud rate = f_clk / SPI divider
++	 * Example (STM32F401, SPI2, PCLK2 @ 42MHz, Requested 300KHz)
++	 *
++	 *  f_clk == PCLK1 == 42MHz
++	 *  desired SPI baudrate = 300KHz
++	 *  Hence, SPI divider = 42MHz / 300KHz = 140
++	 *
++	 * Therefore, divider = 256, since 128 would give baudrate more
++	 * than asked for.
++	 */
++	div = (int) clock / req_baud;
++	SYS_LOG_DBG("Requested rate: %u Hz, parent clock: %u Hz, div: %u",
++		req_baud, clock, div);
++	/* Return first divider greater than div */
++	for (i = 0; i < SPI_STM32_NUM_SCALERS; i++) {
++		if (baud_rate_scaler[i] >= div) {
++			priv_data->baud_rate = clock / baud_rate_scaler[i];
++			return i;
++		}
++	}
++
++	return -EINVAL;
++}
++
++/**
++ * @brief Configure the SPI host controller for operating against slaves
++ * @param dev Pointer to the device structure for the driver instance
++ * @param config Pointer to the application provided configuration
++ *
++ * @return 0 if successful, an error code otherwise.
++ */
++static int spi_stm32_configure(struct device *dev, struct spi_config *config)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++	u32_t flags = config->config;
++	u32_t frame_sz;	/* frame size, in bits */
++	int ret;
++
++	SYS_LOG_INF("dev %p (regs @ 0x%x), config 0x%x, freq 0x%x", dev,
++			spi_regs, config->config, config->max_sys_freq);
++
++	/*
++	 * Ensure module operation is stopped and module is reset
++	 */
++	spi_stm32_stop(dev);
++
++	/* Set operational mode */
++	if (SPI_STM32_OP_MODE_GET(flags) == SPI_STM32_MASTER_MODE) {
++		priv_data->mode = SPI_STM32_MASTER_MODE;
++		spi_regs->cr1.bit.mstr = 1;
++	} else if (SPI_STM32_OP_MODE_GET(flags) == SPI_STM32_SLAVE_MODE) {
++		priv_data->mode = SPI_STM32_SLAVE_MODE;
++		spi_regs->cr1.bit.mstr = 0;
++	} else {
++		SYS_LOG_ERR("Invalid operation mode!");
++		return -EINVAL;
++	}
++
++	/* Set baud rate */
++	ret = spi_stm32_set_baud_rate(dev, config->max_sys_freq);
++	if (ret >= 0) {
++		spi_regs->cr1.bit.br = ret;
++		SYS_LOG_INF("SPI baud rate set to: %u Hz [div %u]",
++			priv_data->baud_rate, baud_rate_scaler[ret]);
++	} else {
++		SYS_LOG_ERR("Unable to set SPI to %u Hz, "
++					"try changing APBx prescaler");
++		return ret;
++	}
++
++	/* Frame format */
++	if (flags & SPI_STM32_FRAME_TI) {
++		spi_regs->cr2.bit.frf = 1;
++		/* TI mode doesn't require CPOL, CPHA, LSB, SSM, SSI, SSOE */
++		goto out;
++	}
++
++	/* Slave control */
++	if (SPI_STM32_SLAVE_MGMT_MODE_GET(flags) == SPI_STM32_SLAVE_SW) {
++		spi_regs->cr1.bit.ssm = SPI_STM32_CR1_SW_SLAVE_MANAGEMENT;
++		/* SSI setting as per 20.3.2 and 20.3.3 - very confusing HW */
++		if (SPI_STM32_OP_MODE_GET(flags) == SPI_STM32_MASTER_MODE) {
++			spi_regs->cr1.bit.ssi = 1;
++		} else {
++			spi_regs->cr1.bit.ssi = 0;
++		}
++	} else {
++		spi_regs->cr1.bit.ssm = SPI_STM32_CR1_HW_SLAVE_MANAGEMENT;
++	}
++	if (SPI_STM32_SLAVE_MGMT_MODE_GET(flags) ==
++				SPI_STM32_SLAVE_HW_SS_OUTPUT) {
++		spi_regs->cr2.bit.ssoe = 1;
++	} else if (SPI_STM32_SLAVE_MGMT_MODE_GET(flags) ==
++				SPI_STM32_SLAVE_HW_NO_OUTPUT) {
++		spi_regs->cr2.bit.ssoe = 0;
++	}
++
++	/* Set clock polarity and phase */
++	if (flags & SPI_MODE_CPOL) {
++		spi_regs->cr1.bit.cpol =
++			SPI_STM32_CR1_CLOCK_POLARITY_IDLE_HIGH;
++	}
++	if (flags & SPI_MODE_CPHA) {
++		spi_regs->cr1.bit.cpha =
++			SPI_STM32_CR1_CLOCK_PHASE_TRAILING_EDGE_CAPTURE;
++	}
++
++	/* Byte ordering */
++	if (flags & SPI_TRANSFER_LSB) {
++		spi_regs->cr1.bit.lsb_first = SPI_STM32_CR1_LSBFIRST;
++	}
++
++out:
++	/*
++	 * Frame size is limited to 16 bits (vs. 8 bit value in
++	 * struct spi_config), programmed as: (frame_size - 1)
++	 */
++	frame_sz = SPI_WORD_SIZE_GET(flags);
++	if (frame_sz > SPI_STM32_WORD_SIZE_MAX) {
++		SYS_LOG_ERR("Frame size larger than max word size");
++		return -ENOTSUP;
++	}
++
++	/* 8-bit frames */
++	/* FIXME: Support 16-bit too */
++	spi_regs->cr1.bit.dff = SPI_STM32_CR1_DATA_FRAME_FORMAT_8BIT;
++	priv_data->frame_sz = frame_sz;
++
++	/* Initialize Tx/Rx queue */
++	priv_data->tx_buf = priv_data->rx_buf = NULL;
++	priv_data->tx_buf_len = priv_data->rx_buf_len = 0;
++
++	spi_stm32_show_cr(dev);
++	SYS_LOG_INF("STM32 SPI Driver configured");
++
++	return 0;
++}
++
++/**
++ * @brief Read and/or write a defined amount of data through an SPI driver
++ *
++ * @param dev Pointer to the device structure for the driver instance
++ * @param tx_buf Memory buffer that data should be transferred from
++ * @param tx_buf_len Size of the memory buffer available for reading from
++ * @param rx_buf Memory buffer that data should be transferred to
++ * @param rx_buf_len Size of the memory buffer available for writing to
++ *
++ * @return 0 if successful, another DEV_* code otherwise.
++ */
++static int spi_stm32_transceive(struct device *dev,
++				const void *tx_buf, u32_t tx_buf_len,
++				void *rx_buf, u32_t rx_buf_len)
++{
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++	const struct spi_stm32_config *cfg = DEV_CFG(dev);
++	u32_t num = cfg->num;
++	u16_t irqs;
++
++	/* Critical section */
++	k_sem_take(&priv_data->xfer_sem, K_FOREVER);
++	if (pending_transfers[num].dev) {
++		k_sem_give(&priv_data->xfer_sem);
++		return -EBUSY;
++	}
++	pending_transfers[num].dev = dev;
++	k_sem_give(&priv_data->xfer_sem);
++
++	SYS_LOG_DBG(": dev %p, Tx: %p (%u), Rx: %p (%u)",
++		    dev, tx_buf, tx_buf_len, rx_buf, rx_buf_len);
++
++#ifdef CONFIG_SYS_LOG_SPI_LEVEL
++	__ASSERT(!((tx_buf_len && (tx_buf == NULL)) ||
++		   (rx_buf_len && (rx_buf == NULL))),
++		 "spi_stm32_transceive: ERROR - NULL buffer");
++#endif
++
++	/* Set buffers info */
++	priv_data->tx_buf = tx_buf;
++	priv_data->rx_buf = rx_buf;
++	priv_data->tx_buf_len = tx_buf_len;
++	priv_data->rx_buf_len = rx_buf_len;
++	priv_data->error = 0;
++	priv_data->transmitted = 0;
++	priv_data->received = 0;
++	priv_data->trans_len = max(tx_buf_len, rx_buf_len);
++
++	/* enable transfer operations - must be before enabling interrupts */
++	spi_stm32_start(dev);
++
++	/*
++	 * Enable interrupts:
++	 * - Transmit Buffer Empty (no more data to send)
++	 * - Receive Buffer Not empty (new data arrived)
++	 * - Errors
++	 *
++	 * NOTE: DMA requests are not yet supported.
++	 */
++	irqs = (SPI_STM32_CR2_ERRIE | SPI_STM32_CR2_RXNEIE |
++			SPI_STM32_CR2_TXEIE);
++	spi_stm32_enable_irq(dev, irqs);
++
++	spi_stm32_show_status(dev, "transcieve-after-irq-enable");
++
++	/* wait for transfer to complete */
++	k_sem_take(&priv_data->device_sync_sem, K_FOREVER);
++
++	/* check completion status */
++	if (priv_data->error) {
++		spi_stm32_clear_errors(dev);
++		priv_data->error = 0;
++		return -EIO;
++	}
++
++	return 0;
++}
++
++static void spi_stm32_push_byte(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++	u8_t data;
++
++	if (priv_data->transmitted < priv_data->tx_buf_len) {
++		data = *(u8_t *)(priv_data->tx_buf);
++		priv_data->tx_buf++;
++	} else {
++		data = 0x55; /* dummy char to clock when out of TX buffer */
++	}
++	/* Write data to MOSI/MISO */
++	spi_regs->dr = data;
++	priv_data->transmitted++;
++	SYS_LOG_DBG(": [0x%x, (%c), %d]", data, data, data);
++}
++
++static void spi_stm32_pull_byte(struct device *dev)
++{
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++	u8_t data;
++
++	/* Read data from MOSI/MISO */
++	data = (u8_t) spi_regs->dr;
++	if (priv_data->received < priv_data->rx_buf_len) {
++		*(u8_t *)(priv_data->rx_buf) = data;
++		priv_data->rx_buf++;
++	}
++	priv_data->received++;
++
++	SYS_LOG_DBG(": [0x%x, (%c), %d]", data, data, data);
++}
++
++static void spi_stm32_txrx(struct device *dev)
++{
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++
++	if (priv_data->mode == SPI_STM32_SLAVE_MODE) {
++		/* NOTE: In case of slave, there is no guarantee that its Tx
++		 * buffer will get emptied since it is clocked by Master
++		 */
++		k_sem_take(&priv_data->xfer_sem, K_FOREVER);
++
++		if (spi_stm32_tx_empty(dev)) {
++			spi_stm32_push_byte(dev);
++		}
++
++		if (spi_stm32_rx_not_empty(dev)) {
++			spi_stm32_pull_byte(dev);
++		}
++
++		k_sem_give(&priv_data->xfer_sem);
++	} else {		/* MASTER */
++		while ((priv_data->transmitted < priv_data->tx_buf_len) ||
++		       (priv_data->received < priv_data->rx_buf_len)) {
++
++			k_sem_take(&priv_data->xfer_sem, K_FOREVER);
++
++			while (!spi_stm32_tx_empty(dev)) {
++			}
++			spi_stm32_push_byte(dev);
++
++			while (!spi_stm32_rx_not_empty(dev)) {
++			}
++			spi_stm32_pull_byte(dev);
++
++			k_sem_give(&priv_data->xfer_sem);
++		}
++	}
++}
++
++/**
++ * @brief Complete SPI module data transfer operations.
++ * @param dev Pointer to the device structure for the driver instance
++ * @param error Error condition (0 = no error, otherwise an error occurred)
++ * @return None.
++ */
++static void spi_stm32_complete(struct device *dev, u32_t error)
++{
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++	const struct spi_stm32_config *cfg = DEV_CFG(dev);
++	u32_t num = cfg->num;
++	struct pending_transfer *pending = &pending_transfers[num];
++	u16_t irqs = (SPI_STM32_CR2_RXNEIE | SPI_STM32_CR2_TXEIE |
++			 SPI_STM32_CR2_ERRIE);
++
++	/* if received == trans_len, then transmitted == trans_len */
++	if (!(priv_data->received == priv_data->trans_len) && !error) {
++		return;
++	}
++
++	priv_data->error = error;
++
++	k_sem_take(&priv_data->xfer_sem, K_FOREVER);
++	pending->dev = NULL;
++	k_sem_give(&priv_data->xfer_sem);
++
++	spi_stm32_disable_irq(dev, irqs);
++	priv_data->tx_buf = priv_data->rx_buf = NULL;
++	priv_data->tx_buf_len = priv_data->rx_buf_len = 0;
++
++	/* Disable transfer operations */
++	spi_stm32_stop(dev);
++
++	SYS_LOG_DBG("Total: Tx [%u], Rx [%u] bytes",
++		priv_data->transmitted, priv_data->received);
++
++	if (error) {
++		SYS_LOG_ERR("Transaction aborted due to error!");
++	}
++
++	/* Signal completion */
++	k_sem_give(&priv_data->device_sync_sem);
++}
++
++/**
++ * @brief SPI module interrupt handler.
++ * @param arg Pointer to the device structure for the driver instance
++ * @return None.
++ */
++static void spi_stm32_isr(void *arg)
++{
++	struct device *dev = arg;
++	volatile struct spi_stm32 *spi_regs = SPI_REGS(dev);
++	u32_t error = 0;
++	u16_t status = spi_regs->sr.val;
++
++	SYS_LOG_DBG("spi_stm32_isr: dev %p, status 0x%x", dev, status);
++
++	if (status & (SPI_STM32_SR_OVERRUN | SPI_STM32_SR_MODE_ERROR |
++		      SPI_STM32_SR_CRC_ERROR)) {
++		error = 1;
++		goto out;
++	}
++	spi_stm32_txrx(dev);
++
++out:
++	/* finish processing, if data transfer is complete */
++	spi_stm32_complete(dev, error);
++}
++
++static const struct spi_driver_api stm32_spi_api = {
++	.configure = spi_stm32_configure,
++	.slave_select = NULL,
++	.transceive = spi_stm32_transceive,
++};
++
++static inline void __spi_stm32_get_clock(struct device *dev)
++{
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++	struct device *clk =
++		device_get_binding(STM32_CLOCK_CONTROL_NAME);
++
++	__ASSERT_NO_MSG(clk);
++	priv_data->clock = clk;
++}
++
++static int spi_stm32_init(struct device *dev)
++{
++	const struct spi_stm32_config *cfg = DEV_CFG(dev);
++	struct spi_stm32_data *priv_data = DEV_DATA(dev);
++
++	__spi_stm32_get_clock(dev);
++
++	/* Enable module clocking */
++	clock_control_on(priv_data->clock,
++			(clock_control_subsys_t *) &cfg->pclken);
++
++	/*
++	 * Ensure module operation is stopped and module is reset
++	 */
++	spi_stm32_stop(dev);
++	/* TODO: Reset the module through APB2RSTR */
++
++	/* Set up the synchronous call mechanism */
++	k_sem_init(&priv_data->device_sync_sem, 0, 1);
++	k_sem_init(&priv_data->xfer_sem, 1, 1);
++
++	/* Configure and enable SPI module IRQs */
++	cfg->config_func();
++
++	SYS_LOG_INF("STM32 SPI Driver initialized on device: %p", dev);
++
++	return 0;
++}
++
++/* FIXME: SPI Kconfig starts counting from 0, stm32 starts counting from spi 1,
++ * make it less confusing by having per-board/per-soc Kconfig
++ */
++
++/* system bindings */
++#ifdef CONFIG_SPI_0
++
++static void spi_config_1_irq(void);
++
++static struct spi_stm32_data spi_stm32_data_port_1;
++
++static const struct spi_stm32_config spi_stm32_config_1 = {
++	.num = 0,
++	.base_addr = SPI1_BASE,
++	.pclken = { .bus = STM32F4X_CLOCK_BUS_APB2,
++		    .enr = STM32F4X_CLOCK_ENABLE_SPI1 },
++	.config_func = spi_config_1_irq,
++};
++
++DEVICE_AND_API_INIT(spi_stm32_port_1, CONFIG_SPI_0_NAME, spi_stm32_init,
++		    &spi_stm32_data_port_1, &spi_stm32_config_1, PRE_KERNEL_1,
++		    CONFIG_SPI_INIT_PRIORITY, &stm32_spi_api);
++
++
++static void spi_config_1_irq(void)
++{
++	IRQ_CONNECT(STM32F4_IRQ_SPI1, CONFIG_SPI_0_IRQ_PRI,
++		    spi_stm32_isr, DEVICE_GET(spi_stm32_port_1), 0);
++	irq_enable(STM32F4_IRQ_SPI1);
++}
++
++#endif /* CONFIG_SPI_0 */
++
++#ifdef CONFIG_SPI_1
++
++static void spi_config_2_irq(void);
++
++static struct spi_stm32_data spi_stm32_data_port_2;
++
++static const struct spi_stm32_config spi_stm32_config_2 = {
++	.num = 1,
++	.base_addr = SPI2_BASE,
++	.pclken = { .bus = STM32F4X_CLOCK_BUS_APB1,
++		    .enr = STM32F4X_CLOCK_ENABLE_SPI2 },
++	.config_func = spi_config_2_irq,
++};
++
++DEVICE_AND_API_INIT(spi_stm32_port_2, CONFIG_SPI_1_NAME, spi_stm32_init,
++		    &spi_stm32_data_port_2, &spi_stm32_config_2, PRE_KERNEL_1,
++		    CONFIG_SPI_INIT_PRIORITY, &stm32_spi_api);
++
++
++static void spi_config_2_irq(void)
++{
++	IRQ_CONNECT(STM32F4_IRQ_SPI2, CONFIG_SPI_1_IRQ_PRI,
++		    spi_stm32_isr, DEVICE_GET(spi_stm32_port_2), 0);
++	irq_enable(STM32F4_IRQ_SPI2);
++}
++
++#endif /* CONFIG_SPI_1 */
+diff --git a/drivers/spi/spi_stm32_priv.h b/drivers/spi/spi_stm32_priv.h
+new file mode 100644
+index 000000000..c6c58e432
+--- /dev/null
++++ b/drivers/spi/spi_stm32_priv.h
+@@ -0,0 +1,211 @@
++/* spi_stm32.h - STMicroelectronics STM32 SPI driver private definitions */
++
++/*
++ * Copyright (c) 2016 Linaro Limited.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef __SPI_STM32_PRIV_H__
++#define __SPI_STM32_PRIV_H__
++
++#include <clock_control/stm32_clock_control.h>
++
++/* Control Register 1 (CR1) settings */
++union __spi_cr1 {
++	u16_t val;
++	struct {
++		u16_t cpha:1 __packed;
++		u16_t cpol:1 __packed;
++		u16_t mstr:1 __packed;
++		u16_t br:3 __packed;
++		u16_t spe:1 __packed;
++		u16_t lsb_first:1 __packed;
++		u16_t ssi:1 __packed;
++		u16_t ssm:1 __packed;
++		u16_t rx_only:1 __packed;
++		u16_t dff:1 __packed;
++		u16_t crc_next:1 __packed;
++		u16_t crc_en:1 __packed;
++		u16_t bidi_oe:1 __packed;
++		u16_t bidi_mode:1 __packed;
++	} bit;
++};
++
++#define SPI_STM32_CR1_BIDIRECTIONAL_MODE_ENABLE		(0x1)
++#define SPI_STM32_CR1_BIDIRECTIONAL_OUTPUT		(0x1)
++#define SPI_STM32_CR1_HW_CRC_ENABLE			(0x1)
++/* Only write after disabling SPI (SPE=0) */
++#define SPI_STM32_CR1_DATA_FRAME_FORMAT_8BIT		(0x0)
++/* Only write after disabling SPI (SPE=0) */
++#define SPI_STM32_CR1_DATA_FRAME_FORMAT_16BIT		(0x1)
++#define SPI_STM32_CR1_SW_SLAVE_MANAGEMENT		(0x1)
++#define SPI_STM32_CR1_HW_SLAVE_MANAGEMENT		(0x0)
++#define SPI_STM32_CR1_LSBFIRST				(0x1)
++/* master switch for the module */
++#define SPI_STM32_CR1_ENABLE				(0x1)
++#define SPI_STM32_CR1_DISABLE				(0x0)
++
++/* br */
++#define SPI_STM32_CR1_BAUD_RATE_MASK			(0x7)
++
++enum {
++	SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_2 = 0,
++	SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_4,
++	SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_8,
++	SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_16,
++	SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_32,
++	SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_64,
++	SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_128,
++	SPI_STM32_CR1_BAUD_RATE_PCLK_DIV_256,
++};
++
++#define SPI_STM32_CR1_MASTER_MODE				(0x1)
++#define SPI_STM32_CR1_SLAVE_MODE				(0x0)
++#define SPI_STM32_CR1_CLOCK_POLARITY_IDLE_LOW			(0x0)
++#define SPI_STM32_CR1_CLOCK_POLARITY_IDLE_HIGH			(0x1)
++#define SPI_STM32_CR1_CLOCK_PHASE_LEADING_EDGE_CAPTURE		(0x0)
++#define SPI_STM32_CR1_CLOCK_PHASE_TRAILING_EDGE_CAPTURE		(0x1)
++
++/* Control Register 2 (CR2) settings */
++union __spi_cr2 {
++	u16_t val;
++	struct {
++		u16_t rxdmaen:1 __packed; /* Bit 0 */
++		u16_t txdmaen:1 __packed;
++		u16_t ssoe:1 __packed;
++		u16_t rsvd__3:1 __packed;
++		u16_t frf:1 __packed;
++		u16_t errie:1 __packed;
++		u16_t rxneie:1 __packed;
++		u16_t txeie:1 __packed;
++		u16_t rsvd__8_15:8 __packed;
++	} bit;
++};
++
++/* enable TI frame format */
++#define SPI_STM32_CR2_FRAME_TI	(0x1 << 4)
++/* interrupt whenever the following occurs:
++ * - CRCERR, OVR, MODF error in SPI mode
++ * - FRE in TI mode
++ * - UDR, OVER, FRE in I2S mode
++ */
++#define SPI_STM32_CR2_ERRIE	(0x1 << 5)
++/* interrupt whenever RXNE flag set */
++#define SPI_STM32_CR2_RXNEIE	(0x1 << 6)
++/* interrupt whenever TXE flag set */
++#define SPI_STM32_CR2_TXEIE	(0x1 << 7)
++
++/* Status Register (SR) settings */
++union __spi_sr {
++	u16_t val;
++	struct {
++		u16_t rxne:1 __packed;    /* Bit 0 */
++		u16_t txe:1 __packed;
++		u16_t chside:1 __packed;
++		u16_t udr:1 __packed;
++		u16_t crc_err:1 __packed;
++		u16_t modf:1 __packed;
++		u16_t ovr:1 __packed;
++		u16_t bsy:1 __packed;
++		u16_t fre:1 __packed;
++		u16_t rsvd__9_15:7 __packed;
++	} bit;
++};
++
++/* RX buffer not empty */
++#define SPI_STM32_SR_RXNE		(0x1 << 0)
++/* TX buffer empty */
++#define SPI_STM32_SR_TXE		(0x1 << 1)
++/* Right channel received or needs transmission */
++#define SPI_STM32_SR_CHANNEL_RIGHT	(0x1 << 2)
++/* Left channel received or needs transmission */
++#define SPI_STM32_SR_CHANNEL_LEFT	(0x0 << 2)
++/* Underrun occurred */
++#define SPI_STM32_SR_UNDERRUN		(0x1 << 3)
++/* CRC doesn't match RXCRCR register */
++#define SPI_STM32_SR_CRC_ERROR		(0x1 << 4)
++/* Set by HW and needs software sequence in Section 20.3.10 to reset */
++#define SPI_STM32_SR_MODE_ERROR		(0x1 << 5)
++/* Overrun occurred */
++#define SPI_STM32_SR_OVERRUN		(0x1 << 6)
++/* SPI is busy or TX buffer not empty */
++#define SPI_STM32_SR_BUSY		(0x1 << 7)
++/* SPI is busy or TX buffer not empty */
++#define SPI_STM32_SR_FRAME_ERROR	(0x1 << 8)
++
++/* Registers:
++ * Since the registers are 16 bits but aligned on 32 bit boundaries,
++ * we need to fill the 16 bit holes to allow direct mapping of the
++ * register addresses
++ *
++ * FIXME: Just represent as 32 bit?
++ */
++struct spi_stm32 {
++	union __spi_cr1 cr1;
++	u16_t rsvd_hole1;
++	union __spi_cr2 cr2;
++	u16_t rsvd_hole2;
++	union __spi_sr sr;
++	u16_t rsvd_hole3;
++	u16_t dr;		/* data register, 8 or 16-bit depend on DFF */
++	u16_t rsvd_hole4;
++	u16_t crcpr;
++	u16_t rsvd_hole5;
++	u16_t rxcrcr;
++	u16_t rsvd_hole6;
++	u16_t txcrcr;
++	u16_t rsvd_hole7;
++};
++
++
++typedef void (*spi_stm32_config_t)();
++
++/* platform configuration data */
++struct spi_stm32_config {
++	u32_t num;
++	u32_t base_addr;		/* base address of SPI module reg */
++#ifdef CONFIG_SOC_SERIES_STM32F4X
++	struct stm32f4x_pclken pclken;	/* SPI module's clock subsystem */
++#endif
++	spi_stm32_config_t config_func;	/* IRQ config function pointer */
++};
++
++/* runtime private data */
++struct spi_stm32_data {
++	u32_t tx_buf_len;
++	u32_t rx_buf_len;
++	u32_t trans_len;
++	u32_t transmitted;
++	u32_t received;
++	u32_t mode;			/* 0 = master, 1 = slave */
++	u32_t baud_rate;
++	u8_t  frame_sz;		/* frame/word size, in bits */
++	const u8_t *tx_buf;
++	u8_t  *rx_buf;
++	u8_t  error;
++	struct k_sem device_sync_sem;	/* semaphore for device sync */
++	struct k_sem xfer_sem;		/* semaphore for data transfer */
++	struct device *clock;
++};
++
++/* Register offsets */
++#define SPI_STM32_REG_CR1		(0x00)
++#define SPI_STM32_REG_CR2		(0x04)
++#define SPI_STM32_REG_SR		(0x08)
++#define SPI_STM32_REG_DR		(0x0C)
++#define SPI_STM32_REG_CRCPR		(0x10)
++#define SPI_STM32_REG_RXCRCR		(0x14)
++#define SPI_STM32_REG_TXCRCR		(0x18)
++
++#endif /* __SPI_STM32_PRIV_H__ */
+diff --git a/include/drivers/spi/spi_stm32.h b/include/drivers/spi/spi_stm32.h
+new file mode 100644
+index 000000000..a221e86e4
+--- /dev/null
++++ b/include/drivers/spi/spi_stm32.h
+@@ -0,0 +1,91 @@
++/* spi_stm32.h - ST Microelectronics STM32 SPI controller driver utilities */
++
++/*
++ * Copyright (c) 2015 Wind River Systems, Inc.
++ *           (c) 2016 Linaro Limited.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#ifndef __SPI_STM32_H__
++#define __SPI_STM32_H__
++
++/* Supported SPI frequencies */
++#define SPI_STM32_CLK_FREQ_200KHZ	200000
++#define SPI_STM32_CLK_FREQ_400KHZ	400000
++#define SPI_STM32_CLK_FREQ_600KHZ	600000
++#define SPI_STM32_CLK_FREQ_800KHZ	800000
++#define SPI_STM32_CLK_FREQ_1MHZ	1000000
++#define SPI_STM32_CLK_FREQ_2MHZ	2000000
++#define SPI_STM32_CLK_FREQ_4MHZ	4000000
++#define SPI_STM32_CLK_FREQ_6MHZ	6000000
++#define SPI_STM32_CLK_FREQ_8MHZ	8000000
++#define SPI_STM32_CLK_FREQ_10MHZ	10000000
++#define SPI_STM32_CLK_FREQ_20MHZ	20000000
++
++/*
++ * Device configuration
++ *
++ * Device-independent configuration:
++ * Bits [0 : 11] in the config parameter of the spi_configure() API are defined
++ * with the following fields.
++ *
++ * SCK polarity     [ 0 ]       - SCK inactive state (0 = low, 1 = high)
++ * SCK phase        [ 1 ]       - Data captured/changed on which SCK edge:
++ *                              -   0 = leading/following edges, respectively
++ *                              -   1 = following/leading edges, respectively
++ * loop_mode        [ 2 ]       - Not used/Unsupported
++ * transfer_mode    [ 3 ]       - First significant bit (0 = MSB, 1 = LSB)
++ * word_size        [ 4 : 7 ]   - Size of a data train in bits
++ * unused           [ 8 : 11 ]  - Unused word_size field bits
++ *
++ * Device-specific configuration:
++ * Bits [12 : 31] in the config parameter of the spi_configure() API are
++ * available, with the following fields defined for this device.
++ *
++ * Operational Mode [12:13]      - Master (00), Slave (01)
++ * Slave management [14:15]      - Slave selection management
++ *                               -   00 (HW, SSOE=1, master mode)
++ *                               -   01 (HW, SSOE=0, multi-master or slave mode)
++ *                               -   11 (SW, SSI bit in CR1 selects slave)
++ * Frame format     [16]         - Frame format selection
++ *                               -   0 (Motorola mode)
++ *                               -   1 (TI mode - overrides CPOL, CPHA, SSM,
++ *                                      SSI, SSOE)
++ */
++
++/* STM32 SPI word/frame size is limited to 16 bits, as: (size - 1) */
++#define SPI_STM32_WORD_SIZE_MAX	(16)
++
++/* Operation mode */
++#define SPI_STM32_OP_MODE_MASK       (0x3 << 12)
++#define SPI_STM32_OP_MODE(_in_)      ((_in_) << 12)
++#define SPI_STM32_OP_MODE_GET(_in_)  ((_in_) & SPI_STM32_OP_MODE_MASK)
++
++/* Slave management */
++#define SPI_STM32_SLAVE_MGMT_MODE_MASK    (0x3 << 14)
++#define SPI_STM32_SLAVE_MGMT_MODE(_in_)  ((_in_) << 14)
++#define SPI_STM32_SLAVE_MGMT_MODE_GET(_in_)	\
++	((_in_) & SPI_STM32_SLAVE_MGMT_MODE_MASK)
++
++/* Frame format */
++#define SPI_STM32_FRAME_MOTOROLA     (0x0 << 16)
++#define SPI_STM32_FRAME_TI           (0x1 << 16)
++
++#define SPI_STM32_MASTER_MODE        SPI_STM32_OP_MODE(0x0)
++#define SPI_STM32_SLAVE_MODE         SPI_STM32_OP_MODE(0x1)
++#define SPI_STM32_SLAVE_HW_SS_OUTPUT SPI_STM32_SLAVE_MGMT_MODE(0x0)
++#define SPI_STM32_SLAVE_HW_NO_OUTPUT SPI_STM32_SLAVE_MGMT_MODE(0x1)
++#define SPI_STM32_SLAVE_SW           SPI_STM32_SLAVE_MGMT_MODE(0x3)
++
++#endif /* __SPI_STM32_H__ */

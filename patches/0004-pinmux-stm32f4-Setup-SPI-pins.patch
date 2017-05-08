@@ -1,0 +1,102 @@
+Bottom: 6c80fc692c1338922306d5ad5eff475b9f1ce683
+Top:    c3fcce6f66c08266dbad5771533e16aec42b7660
+Author: Amit Kucheria <amit.kucheria@linaro.org>
+Date:   2016-09-13 11:30:04 +0530
+
+From f3527acdf91ef7168689e8f5750b64de7d2ae4cf Mon Sep 17 00:00:00 2001
+Subject: [PATCH 04/21] pinmux: stm32f4: Setup SPI pins
+
+Expose SPI pins that are available through alternate function 5
+
+Change-Id: I11b9d6ea6087979e473895ed623446edfffbc71a
+Signed-off-by: Amit Kucheria <amit.kucheria@linaro.org>
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+
+
+---
+
+diff --git a/arch/arm/soc/st_stm32/stm32f4/soc_pinmux.c b/arch/arm/soc/st_stm32/stm32f4/soc_pinmux.c
+index 711372f58..6a251b5fe 100644
+--- a/arch/arm/soc/st_stm32/stm32f4/soc_pinmux.c
++++ b/arch/arm/soc/st_stm32/stm32f4/soc_pinmux.c
+@@ -47,6 +47,46 @@ static const stm32_pin_func_t pin_pa0_funcs[] = {
+ 			STM32F4X_PIN_CONFIG_AF_PUSH_UP,
+ };
+ 
++static const stm32_pin_func_t pin_pa4_funcs[] = {
++	[STM32F4_PINMUX_FUNC_PA4_SPI1_NSS - 1] =
++			STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
++};
++
++static const stm32_pin_func_t pin_pa5_funcs[] = {
++	[STM32F4_PINMUX_FUNC_PA5_SPI1_SCK - 1] =
++			STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
++};
++
++static const stm32_pin_func_t pin_pa6_funcs[] = {
++	[STM32F4_PINMUX_FUNC_PA6_SPI1_MISO - 1] =
++			STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
++};
++
++static const stm32_pin_func_t pin_pa7_funcs[] = {
++	[STM32F4_PINMUX_FUNC_PA7_SPI1_MOSI - 1] =
++			STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
++};
++
++static const stm32_pin_func_t pin_pb12_funcs[] = {
++	[STM32F4_PINMUX_FUNC_PB12_SPI2_NSS - 1] =
++			STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
++};
++
++static const stm32_pin_func_t pin_pb13_funcs[] = {
++	[STM32F4_PINMUX_FUNC_PB13_SPI2_SCK - 1] =
++			STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
++};
++
++static const stm32_pin_func_t pin_pb14_funcs[] = {
++	[STM32F4_PINMUX_FUNC_PB14_SPI2_MISO - 1] =
++			STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
++};
++
++static const stm32_pin_func_t pin_pb15_funcs[] = {
++	[STM32F4_PINMUX_FUNC_PB15_SPI2_MOSI - 1] =
++			STM32F4X_PIN_CONFIG_AF_PUSH_PULL,
++};
++
+ /**
+  * @brief pin configuration
+  */
+@@ -58,6 +98,14 @@ static const struct stm32_pinmux_conf pins[] = {
+ 	STM32_PIN_CONF(STM32_PIN_PA2, pin_pa2_funcs),
+ 	STM32_PIN_CONF(STM32_PIN_PA3, pin_pa3_funcs),
+ 	STM32_PIN_CONF(STM32_PIN_PA0, pin_pa0_funcs),
++	STM32_PIN_CONF(STM32_PIN_PA4, pin_pa4_funcs),
++	STM32_PIN_CONF(STM32_PIN_PA5, pin_pa5_funcs),
++	STM32_PIN_CONF(STM32_PIN_PA6, pin_pa6_funcs),
++	STM32_PIN_CONF(STM32_PIN_PA7, pin_pa7_funcs),
++	STM32_PIN_CONF(STM32_PIN_PB12, pin_pb12_funcs),
++	STM32_PIN_CONF(STM32_PIN_PB13, pin_pb13_funcs),
++	STM32_PIN_CONF(STM32_PIN_PB14, pin_pb14_funcs),
++	STM32_PIN_CONF(STM32_PIN_PB15, pin_pb15_funcs),
+ };
+ 
+ int stm32_get_pin_config(int pin, int func)
+diff --git a/drivers/pinmux/stm32/pinmux_stm32f4.h b/drivers/pinmux/stm32/pinmux_stm32f4.h
+index 02403bc87..329157d54 100644
+--- a/drivers/pinmux/stm32/pinmux_stm32f4.h
++++ b/drivers/pinmux/stm32/pinmux_stm32f4.h
+@@ -22,4 +22,14 @@
+ 
+ #define STM32F4_PINMUX_FUNC_PA0_PWM2_CH1 STM32_PINMUX_FUNC_ALT_1
+ 
++#define STM32F4_PINMUX_FUNC_PA4_SPI1_NSS STM32_PINMUX_FUNC_ALT_5
++#define STM32F4_PINMUX_FUNC_PA5_SPI1_SCK STM32_PINMUX_FUNC_ALT_5
++#define STM32F4_PINMUX_FUNC_PA6_SPI1_MISO STM32_PINMUX_FUNC_ALT_5
++#define STM32F4_PINMUX_FUNC_PA7_SPI1_MOSI STM32_PINMUX_FUNC_ALT_5
++
++#define STM32F4_PINMUX_FUNC_PB12_SPI2_NSS STM32_PINMUX_FUNC_ALT_5
++#define STM32F4_PINMUX_FUNC_PB13_SPI2_SCK STM32_PINMUX_FUNC_ALT_5
++#define STM32F4_PINMUX_FUNC_PB14_SPI2_MISO STM32_PINMUX_FUNC_ALT_5
++#define STM32F4_PINMUX_FUNC_PB15_SPI2_MOSI STM32_PINMUX_FUNC_ALT_5
++
+ #endif /* _STM32F4_PINMUX_H_ */

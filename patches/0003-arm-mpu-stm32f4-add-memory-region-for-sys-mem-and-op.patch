@@ -1,0 +1,56 @@
+Bottom: 08ff4a29fbcf832a998e2dae977853b9c6c17971
+Top:    6c80fc692c1338922306d5ad5eff475b9f1ce683
+Author: Marti Bolivar <marti.bolivar@linaro.org>
+Date:   2017-04-26 15:22:09 -0700
+
+From 0b2a39cedf5ab1ed4d90efa361b14de89f347e06 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 03/21] arm: mpu: stm32f4: add memory region for sys mem and
+ options bytes
+
+Documentation for STM32F4 shows that the following areas of memory:
+- 0x1FFF0000 - 0x1FFF7A0F: System memory
+- 0x1FFF7A10 - 0x1FFFBFFF: Reserved
+- 0x1FFFC000 - 0x1FFFC007: Option bytes
+
+We are accessing the option bytes to read the device serial # to
+use as a unique id.  Let's add this entire block to the MPU memory
+regions to avoid memory violations.
+
+Change-Id: Iac7a0c85a5b4c079d79ce85e2e2e1a4320cddc32
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
+
+
+---
+
+diff --git a/arch/arm/soc/st_stm32/stm32f4/arm_mpu_regions.c b/arch/arm/soc/st_stm32/stm32f4/arm_mpu_regions.c
+index 26571274f..4cbda1fcd 100644
+--- a/arch/arm/soc/st_stm32/stm32f4/arm_mpu_regions.c
++++ b/arch/arm/soc/st_stm32/stm32f4/arm_mpu_regions.c
+@@ -12,6 +12,13 @@
+ /* SoC Private Peripheral Bus */
+ #define PPB_BASE  0xE0000000
+ 
++/*
++ * SoC base of system memory.
++ *
++ * After this area, the device UID and option bytes follow.
++ */
++#define SM_BASE		0x1FFF0000
++
+ static struct arm_mpu_region mpu_regions[] = {
+ 	/* Region 0 */
+ 	MPU_REGION_ENTRY("FLASH_0",
+@@ -33,8 +40,12 @@ static struct arm_mpu_region mpu_regions[] = {
+ 	MPU_REGION_ENTRY("PPB_0",
+ 			 PPB_BASE,
+ 			 REGION_PPB_ATTR(REGION_256M)),
+-#if defined(CONFIG_BL_APPLICATION)
+ 	/* Region 5 */
++	MPU_REGION_ENTRY("SM_UID_OB",
++			 SM_BASE,
++			 REGION_RAM_ATTR(REGION_64K)),
++#if defined(CONFIG_BL_APPLICATION)
++	/* Region 6 */
+ 	/*
+ 	 * The application booting from a bootloader has no access to the
+ 	 * bootloader region. This behavior can be changed at runtime by

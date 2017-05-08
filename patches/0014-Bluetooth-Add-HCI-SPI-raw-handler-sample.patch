@@ -1,0 +1,460 @@
+Bottom: 9cbf0d17bbedde6f76f74b1daf4288275057b18b
+Top:    d64ac212244590b34766b2c9bab8eadf328f3821
+Author: Ricardo Salveti <ricardo.salveti@linaro.org>
+Date:   2016-09-20 16:14:16 +0530
+
+From e2d56d4a5cb0aa6e2aff6e4d5082719ff8416872 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 14/21] Bluetooth: Add HCI SPI raw handler sample
+
+Sample application that allows communication between the Bluetooth HCI stack
+running on host processor and the Bluetooth controller running on the
+communication processor via SPI.
+
+Change-Id: Ia2ac24ace50595c31748e492faaf9567e8df20dd
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+Signed-off-by: Marti Bolivar <marti.bolivar@linaro.org>
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
+
+
+---
+
+diff --git a/samples/bluetooth/hci_spi/96b_carbon_nrf51.conf b/samples/bluetooth/hci_spi/96b_carbon_nrf51.conf
+new file mode 100644
+index 000000000..2caaa2702
+--- /dev/null
++++ b/samples/bluetooth/hci_spi/96b_carbon_nrf51.conf
+@@ -0,0 +1,15 @@
++CONFIG_GPIO=y
++CONFIG_SPI=y
++CONFIG_MAIN_STACK_SIZE=512
++CONFIG_BLUETOOTH=y
++CONFIG_BLUETOOTH_HCI_RAW=y
++CONFIG_BLUETOOTH_MAX_CONN=20
++CONFIG_BLUETOOTH_TINYCRYPT_ECC=n
++CONFIG_BLUETOOTH_SPI_TO_HOST_DEV_NAME="SPI_1"
++CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_DEV_NAME="GPIO_0"
++CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_PIN=28
++
++# Debug
++CONFIG_SYS_LOG=y
++CONFIG_SYS_LOG_DEFAULT_LEVEL=2
++CONFIG_BLUETOOTH_DEBUG_LOG=y
+diff --git a/samples/bluetooth/hci_spi/Makefile b/samples/bluetooth/hci_spi/Makefile
+new file mode 100644
+index 000000000..7d7440161
+--- /dev/null
++++ b/samples/bluetooth/hci_spi/Makefile
+@@ -0,0 +1,4 @@
++CONF_FILE = 96b_carbon_nrf51.conf
++BOARD ?= 96b_carbon_nrf51
++
++include $(ZEPHYR_BASE)/Makefile.inc
+diff --git a/samples/bluetooth/hci_spi/README.rst b/samples/bluetooth/hci_spi/README.rst
+new file mode 100644
+index 000000000..5896b1cc9
+--- /dev/null
++++ b/samples/bluetooth/hci_spi/README.rst
+@@ -0,0 +1,19 @@
++Bluetooth: HCI SPI
++##################
++
++Overview
++********
++
++Expose Zephyr Bluetooth Controller support over SPI to another device/CPU using
++the Zephyr SPI HCI transport protocol (similar to BlueNRG).
++
++
++Requirements
++************
++
++* A board with SPI and BLE support
++
++Building and Running
++********************
++
++See :ref:`bluetooth setup section <bluetooth_setup>` for details.
+diff --git a/samples/bluetooth/hci_spi/nrf51_pca10028.conf b/samples/bluetooth/hci_spi/nrf51_pca10028.conf
+new file mode 100644
+index 000000000..9bc913bab
+--- /dev/null
++++ b/samples/bluetooth/hci_spi/nrf51_pca10028.conf
+@@ -0,0 +1,27 @@
++CONFIG_GPIO=y
++CONFIG_SPI=y
++CONFIG_MAIN_STACK_SIZE=512
++CONFIG_BLUETOOTH=y
++CONFIG_BLUETOOTH_HCI_RAW=y
++CONFIG_BLUETOOTH_MAX_CONN=20
++CONFIG_BLUETOOTH_TINYCRYPT_ECC=n
++CONFIG_BLUETOOTH_SPI_TO_HOST_DEV_NAME="SPI_1"
++CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_DEV_NAME="GPIO_0"
++CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_PIN=22
++
++# Debug
++CONFIG_SYS_LOG=y
++CONFIG_SYS_LOG_DEFAULT_LEVEL=2
++CONFIG_BLUETOOTH_DEBUG_LOG=y
++
++# SPI port and pins to communicate with the SPI master
++CONFIG_SPI=y
++CONFIG_SPI_1=y
++CONFIG_SPI_1_NAME="SPI_1"
++CONFIG_SPI_1_IRQ_PRI=1
++CONFIG_SPI_NRF5=y
++CONFIG_SPIS1_NRF5=y
++CONFIG_SPIS1_NRF5_GPIO_SCK_PIN=29
++CONFIG_SPIS1_NRF5_GPIO_MOSI_PIN=25
++CONFIG_SPIS1_NRF5_GPIO_MISO_PIN=28
++CONFIG_SPIS1_NRF5_GPIO_CSN_PIN=24
+diff --git a/samples/bluetooth/hci_spi/src/Makefile b/samples/bluetooth/hci_spi/src/Makefile
+new file mode 100644
+index 000000000..b666967fd
+--- /dev/null
++++ b/samples/bluetooth/hci_spi/src/Makefile
+@@ -0,0 +1 @@
++obj-y += main.o
+diff --git a/samples/bluetooth/hci_spi/src/main.c b/samples/bluetooth/hci_spi/src/main.c
+new file mode 100644
+index 000000000..c09ef70cd
+--- /dev/null
++++ b/samples/bluetooth/hci_spi/src/main.c
+@@ -0,0 +1,288 @@
++/*
++ * Copyright (c) 2017 Linaro Limited
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <errno.h>
++#include <stddef.h>
++#include <stdio.h>
++
++#include <zephyr.h>
++#include <misc/byteorder.h>
++#include <logging/sys_log.h>
++#include <misc/stack.h>
++
++#include <device.h>
++#include <init.h>
++#include <gpio.h>
++#include <spi.h>
++
++#include <net/buf.h>
++#include <bluetooth/bluetooth.h>
++#include <bluetooth/l2cap.h>
++#include <bluetooth/log.h>
++#include <bluetooth/hci.h>
++#include <bluetooth/buf.h>
++#include <bluetooth/hci_raw.h>
++
++
++#define HCI_CMD			0x01
++#define HCI_ACL			0x02
++#define HCI_SCO			0x03
++#define HCI_EVT			0x04
++
++/* Special Values */
++#define SPI_WRITE		0x0A
++#define SPI_READ		0x0B
++#define READY_NOW		0x02
++#define SANITY_CHECK		0x02
++
++/* Offsets */
++#define STATUS_HEADER_READY	0
++#define STATUS_HEADER_TOREAD	3
++
++#define PACKET_TYPE		0
++#define EVT_BLUE_INITIALIZED    0x01
++
++#define GPIO_IRQ_DEV_NAME	CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_DEV_NAME
++#define GPIO_IRQ_PIN		CONFIG_BLUETOOTH_SPI_TO_HOST_IRQ_PIN
++
++/* Needs to be aligned with the SPI master buffer size */
++#define SPI_MAX_MSG_LEN		255
++
++static u8_t rxmsg[SPI_MAX_MSG_LEN];
++static u8_t txmsg[SPI_MAX_MSG_LEN];
++
++/* HCI buffer pools */
++#define CMD_BUF_SIZE BT_BUF_RX_SIZE
++
++NET_BUF_POOL_DEFINE(cmd_tx_pool, CONFIG_BLUETOOTH_HCI_CMD_COUNT, CMD_BUF_SIZE,
++		    BT_BUF_USER_DATA_MIN, NULL);
++
++#define BT_L2CAP_MTU 65 /* 64-byte public key + opcode */
++/* Data size needed for ACL buffers */
++#define BT_BUF_ACL_SIZE BT_L2CAP_BUF_SIZE(BT_L2CAP_MTU)
++
++#if defined(CONFIG_BLUETOOTH_CONTROLLER_TX_BUFFERS)
++#define TX_BUF_COUNT CONFIG_BLUETOOTH_CONTROLLER_TX_BUFFERS
++#else
++#define TX_BUF_COUNT 6
++#endif
++
++NET_BUF_POOL_DEFINE(acl_tx_pool, TX_BUF_COUNT, BT_BUF_ACL_SIZE,
++		    BT_BUF_USER_DATA_MIN, NULL);
++
++static struct device *spi_hci_dev;
++static struct device *gpio_dev;
++static BT_STACK_NOINIT(bt_tx_thread_stack, CONFIG_BLUETOOTH_HCI_TX_STACK_SIZE);
++
++static K_SEM_DEFINE(sem_spi_rx, 0, 1);
++static K_SEM_DEFINE(sem_spi_tx, 0, 1);
++
++static inline int spi_send(struct net_buf *buf)
++{
++	u8_t header_master[5] = { 0 };
++	u8_t header_slave[5] = { READY_NOW, SANITY_CHECK,
++				 0x00, 0x00, 0x00 };
++	u8_t ret;
++
++	SYS_LOG_DBG("buf %p type %u len %u", buf, bt_buf_get_type(buf),
++		    buf->len);
++
++	switch (bt_buf_get_type(buf)) {
++	case BT_BUF_ACL_IN:
++		net_buf_push_u8(buf, HCI_ACL);
++		break;
++	case BT_BUF_EVT:
++		net_buf_push_u8(buf, HCI_EVT);
++		break;
++	default:
++		SYS_LOG_ERR("Unknown type %u", bt_buf_get_type(buf));
++		net_buf_unref(buf);
++		return -EINVAL;
++	}
++
++	if (buf->len > SPI_MAX_MSG_LEN) {
++		SYS_LOG_ERR("TX message too long");
++		net_buf_unref(buf);
++		return -EINVAL;
++	}
++	header_slave[STATUS_HEADER_TOREAD] = buf->len;
++
++	gpio_pin_write(gpio_dev, GPIO_IRQ_PIN, 1);
++
++	/* Coordinate transfer lock with the spi rx thread */
++	k_sem_take(&sem_spi_tx, K_FOREVER);
++	do {
++		ret = spi_transceive(spi_hci_dev, header_slave, 5,
++				header_master, 5);
++		if (ret < 0) {
++			SYS_LOG_ERR("SPI transceive error: %d", ret);
++		}
++	} while (header_master[STATUS_HEADER_READY] != SPI_READ);
++
++	ret = spi_transceive(spi_hci_dev, buf->data, buf->len,
++				&rxmsg, buf->len);
++	if (ret < 0) {
++		SYS_LOG_ERR("SPI transceive error: %d", ret);
++	}
++	net_buf_unref(buf);
++
++	gpio_pin_write(gpio_dev, GPIO_IRQ_PIN, 0);
++	k_sem_give(&sem_spi_rx);
++
++	return 0;
++}
++
++static void bt_tx_thread(void)
++{
++	u8_t header_master[5];
++	u8_t header_slave[5] = { READY_NOW, SANITY_CHECK,
++				 0x00, 0x00, 0x00 };
++	struct net_buf *buf = NULL;
++	struct bt_hci_cmd_hdr cmd_hdr;
++	struct bt_hci_acl_hdr acl_hdr;
++	u8_t ret;
++
++	memset(&txmsg, 0xFF, SPI_MAX_MSG_LEN);
++
++	while (1) {
++		do {
++			ret = spi_transceive(spi_hci_dev, header_slave, 5,
++					     header_master, 5);
++			if (ret < 0) {
++				SYS_LOG_ERR("SPI transceive error: %d", ret);
++			}
++		} while ((header_master[STATUS_HEADER_READY] != SPI_READ) &&
++			 (header_master[STATUS_HEADER_READY] != SPI_WRITE));
++
++		if (header_master[STATUS_HEADER_READY] == SPI_READ) {
++			/* Unblock the spi tx thread and wait for it */
++			k_sem_give(&sem_spi_tx);
++			k_sem_take(&sem_spi_rx, K_FOREVER);
++			continue;
++		}
++
++		/* Receiving data from the SPI Host */
++		ret = spi_transceive(spi_hci_dev, &txmsg, SPI_MAX_MSG_LEN,
++					&rxmsg, SPI_MAX_MSG_LEN);
++		if (ret < 0) {
++			SYS_LOG_ERR("SPI transceive error: %d", ret);
++		}
++
++		switch (rxmsg[PACKET_TYPE]) {
++		case HCI_CMD:
++			memcpy(&cmd_hdr, &rxmsg[1], sizeof(cmd_hdr));
++
++			buf = net_buf_alloc(&cmd_tx_pool, K_NO_WAIT);
++			if (buf) {
++				bt_buf_set_type(buf, BT_BUF_CMD);
++				net_buf_add_mem(buf, &cmd_hdr,
++						sizeof(cmd_hdr));
++				net_buf_add_mem(buf, &rxmsg[4],
++						cmd_hdr.param_len);
++			} else {
++				SYS_LOG_ERR("No available command buffers!");
++				continue;
++			}
++			break;
++		case HCI_ACL:
++			memcpy(&acl_hdr, &rxmsg[1], sizeof(acl_hdr));
++
++			buf = net_buf_alloc(&acl_tx_pool, K_NO_WAIT);
++			if (buf) {
++				bt_buf_set_type(buf, BT_BUF_ACL_OUT);
++				net_buf_add_mem(buf, &acl_hdr,
++						sizeof(acl_hdr));
++				net_buf_add_mem(buf, &rxmsg[5],
++						sys_le16_to_cpu(acl_hdr.len));
++			} else {
++				SYS_LOG_ERR("No available ACL buffers!");
++				continue;
++			}
++			break;
++		default:
++			SYS_LOG_ERR("Unknown BT HCI buf type");
++			continue;
++		}
++
++		SYS_LOG_DBG("buf %p type %u len %u", buf,
++					bt_buf_get_type(buf), buf->len);
++
++		bt_send(buf);
++		stack_analyze("tx_stack", bt_tx_thread_stack,
++						sizeof(bt_tx_thread_stack));
++
++		/* Make sure other threads get a chance to run */
++		k_yield();
++	}
++}
++
++static int hci_spi_init(struct device *unused)
++{
++	static struct spi_config btspi_config = {
++		.config = SPI_WORD(8),
++	};
++
++	SYS_LOG_DBG("");
++
++	spi_hci_dev =
++		device_get_binding(CONFIG_BLUETOOTH_SPI_TO_HOST_DEV_NAME);
++	if (!spi_hci_dev) {
++		return -EINVAL;
++	}
++
++	if (spi_configure(spi_hci_dev, &btspi_config) < 0) {
++		return -EINVAL;
++	}
++
++	gpio_dev = device_get_binding(GPIO_IRQ_DEV_NAME);
++	if (!gpio_dev) {
++		return -EINVAL;
++	}
++	gpio_pin_configure(gpio_dev, GPIO_IRQ_PIN,
++			   GPIO_DIR_OUT | GPIO_PUD_PULL_DOWN);
++
++	return 0;
++}
++
++DEVICE_INIT(hci_spi, "hci_spi", &hci_spi_init, NULL, NULL,
++	    APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
++
++void main(void)
++{
++	static K_FIFO_DEFINE(rx_queue);
++	struct bt_hci_evt_hdr *evt_hdr;
++	struct net_buf *buf;
++	int err;
++
++	SYS_LOG_DBG("Start");
++
++	bt_enable_raw(&rx_queue);
++
++	/* Spawn the TX thread, which feeds cmds and data to the controller */
++	k_thread_spawn(bt_tx_thread_stack, sizeof(bt_tx_thread_stack),
++			(k_thread_entry_t) bt_tx_thread,
++			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
++
++	/* Send a vendor event to announce that the slave is initialized */
++	buf = net_buf_alloc(&cmd_tx_pool, K_FOREVER);
++	if (buf) {
++		bt_buf_set_type(buf, BT_BUF_EVT);
++		evt_hdr = net_buf_add(buf, sizeof(*evt_hdr));
++		evt_hdr->evt = BT_HCI_EVT_VENDOR;
++		evt_hdr->len = 2;
++		u16_t *param = net_buf_add(buf, sizeof(u16_t));
++		*param = sys_cpu_to_le16(EVT_BLUE_INITIALIZED);
++	}
++	spi_send(buf);
++
++	while (1) {
++		buf = net_buf_get(&rx_queue, K_FOREVER);
++		err = spi_send(buf);
++		if (err) {
++			SYS_LOG_ERR("Failed to send");
++		}
++	}
++}
+diff --git a/samples/bluetooth/hci_spi/testcase.ini b/samples/bluetooth/hci_spi/testcase.ini
+new file mode 100644
+index 000000000..572ee0e31
+--- /dev/null
++++ b/samples/bluetooth/hci_spi/testcase.ini
+@@ -0,0 +1,6 @@
++[test]
++tags = spi bluetooth
++build_only = true
++arch_whitelist = arm
++platform_whitelist = 96b_carbon_nrf51
++extra_args = CONF_FILE="96b_carbon_nrf51.conf"
+diff --git a/subsys/bluetooth/host/Kconfig b/subsys/bluetooth/host/Kconfig
+index 2a821876d..bc63946c7 100644
+--- a/subsys/bluetooth/host/Kconfig
++++ b/subsys/bluetooth/host/Kconfig
+@@ -106,6 +106,33 @@ config BLUETOOTH_RECV_IS_RX_THREAD
+ 	# thing to make a call to bt_rx_thread_ready().
+ 	bool
+ 
++config BLUETOOTH_SPI_TO_HOST_DEV_NAME
++	string "Device Name of SPI Device to an external Bluetooth Host"
++	default "SPI_0"
++	depends on SPI && BLUETOOTH_HCI_RAW
++	help
++	  This option specifies the name of SPI device to be used to connect
++	  to an external Bluetooth Host when Zephyr is acting as a Bluetooth
++	  Controller.
++
++config BLUETOOTH_SPI_TO_HOST_IRQ_DEV_NAME
++	string "Device Name of SPI IRQ to an external Bluetooth Host"
++	default "GPIO_0"
++	depends on SPI && BLUETOOTH_HCI_RAW
++	help
++	  This option specifies the name of SPI IRQ device to be used to
++	  notify an external Bluetooth Host when Zephyr is acting as a
++	  Bluetooth Controller.
++
++config BLUETOOTH_SPI_TO_HOST_IRQ_PIN
++	int "SPI IRQ line number to an external Bluetooth Host"
++	default 0
++	depends on SPI && BLUETOOTH_HCI_RAW
++	help
++	  This option specifies the IRQ line number to be used to notify
++	  an external Bluetooth Host when Zephyr is acting as a Bluetooth
++	  Controller.
++
+ config BLUETOOTH_RX_STACK_SIZE
+ 	int "Size of the receiving thread stack"
+ 	depends on BLUETOOTH_HCI_HOST || BLUETOOTH_RECV_IS_RX_THREAD

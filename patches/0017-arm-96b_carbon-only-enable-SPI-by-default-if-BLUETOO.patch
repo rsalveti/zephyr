@@ -1,0 +1,48 @@
+Bottom: b5c5306f8ecf7acebcc663097bddd47cf82e3328
+Top:    dac637f4a6cb510cc827a0ad750a20ef0fbc8b8f
+Author: Ricardo Salveti <ricardo.salveti@linaro.org>
+Date:   2017-02-06 14:37:50 -0200
+
+From 6c4e5adf4f97e7630cca963e8a43d99e6731cf90 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 17/21] arm: 96b_carbon: only enable SPI by default if
+ BLUETOOTH is required
+
+Bluetooth will always require SPI, but don't enable it by default unless
+required by the user.
+
+Change-Id: Ie0e394e32f12a41da39d3f2d55b26de22589afc5
+Signed-off-by: Ricardo Salveti <ricardo.salveti@linaro.org>
+
+
+---
+
+diff --git a/boards/arm/96b_carbon/96b_carbon_defconfig b/boards/arm/96b_carbon/96b_carbon_defconfig
+index ebd31e062..bc11ba28a 100644
+--- a/boards/arm/96b_carbon/96b_carbon_defconfig
++++ b/boards/arm/96b_carbon/96b_carbon_defconfig
+@@ -17,9 +17,6 @@ CONFIG_UART_CONSOLE_ON_DEV_NAME="UART_1"
+ # enable pinmux
+ CONFIG_PINMUX=y
+ 
+-# enable SPI
+-CONFIG_SPI=y
+-
+ # enable GPIO ports A, B, C, D
+ CONFIG_GPIO=y
+ CONFIG_GPIO_STM32_PORTD=y
+diff --git a/boards/arm/96b_carbon/Kconfig.defconfig b/boards/arm/96b_carbon/Kconfig.defconfig
+index 72441d7b3..4ca263a35 100644
+--- a/boards/arm/96b_carbon/Kconfig.defconfig
++++ b/boards/arm/96b_carbon/Kconfig.defconfig
+@@ -10,4 +10,11 @@ if BOARD_96B_CARBON
+ config BOARD
+ 	default 96b_carbon
+ 
++if BLUETOOTH
++
++config SPI
++	default y
++
++endif # BLUETOOTH
++
+ endif # BOARD_96B_CARBON

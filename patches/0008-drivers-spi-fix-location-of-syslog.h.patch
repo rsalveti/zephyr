@@ -1,0 +1,29 @@
+Bottom: 646570b0d001043cffa36d4ba97b2b5018e3ff69
+Top:    632102c64287e8c07e5e0605754ad106a3775afe
+Author: Michael Scott <michael.scott@linaro.org>
+Date:   2017-01-03 11:14:56 -0800
+
+From 6fa4faf9ba9ade07e68d42b6afa79cf28d4a59a1 Mon Sep 17 00:00:00 2001
+Subject: [PATCH 08/21] drivers: spi: fix location of syslog.h
+
+syslog.h header was moved to logging dir in commit
+a9e879e27352600ddfca3081708574a5f547bd45.
+
+Change-Id: If3bd71818ac8878107e88be1f09598bf6b948ab0
+Signed-off-by: Michael Scott <michael.scott@linaro.org>
+
+
+---
+
+diff --git a/drivers/spi/spi_stm32.c b/drivers/spi/spi_stm32.c
+index 258f5c49c..ccc643ff1 100644
+--- a/drivers/spi/spi_stm32.c
++++ b/drivers/spi/spi_stm32.c
+@@ -18,7 +18,7 @@
+  */
+ 
+ #define SYS_LOG_LEVEL CONFIG_SYS_LOG_SPI_LEVEL
+-#include <misc/sys_log.h>
++#include <logging/sys_log.h>
+ #include <misc/printk.h>
+ #include <misc/__assert.h>
