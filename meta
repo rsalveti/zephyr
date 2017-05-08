@@ -1,6 +1,6 @@
 Version: 1
-Previous: 799021c657e924c9dcc2577777e23e4da24f9ab3
-Head: f046549f72eada76d493daed507eaba03de1d238
+Previous: 904d625ceada5948a71d307f99437ea014037302
+Head: 7c70706cd92551400456d126b10016a866c41e93
 Applied:
   0001-tcp-check-net_pkt_get_tx-for-NULL-in-net_tcp_send_pk.patch: 970af04aff3fd535a0a52368164b73b5d9687e1a
   0002-arm-core-mpu-Add-CONFIG-to-allow-RW-access-to-flash.patch: 34e7591f5740e3970c7599217f5c0f6536819d81
@@ -22,6 +22,6 @@ Applied:
   0018-boards-96b_carbon_nrf51-use-pin-29-as-UART-TX.patch: 2acc0bff244bdd1767d53b6829b3c8de6aaa5233
   0019-Bluetooth-HCI-SPI-set-RX-BUF-LEN-to-SPI-MAX-LEN.patch: fd0e4f8e5b161a47c5bdf52cd05ee0ff823fcfeb
   0020-sensor-add-stub-STM32F401x-temperature-driver.patch: 7c70706cd92551400456d126b10016a866c41e93
-  0021-drivers-sensor-add-stm32f401x-temperature-driver.patch: f046549f72eada76d493daed507eaba03de1d238
 Unapplied:
+  0021-drivers-sensor-add-stm32f401x-temperature-driver.patch: f046549f72eada76d493daed507eaba03de1d238
 Hidden:
