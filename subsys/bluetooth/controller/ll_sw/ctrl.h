@@ -34,6 +34,12 @@
 
 #define BIT64(n) (1ULL << (n))
 
+#if defined(CONFIG_BLUETOOTH_CONTROLLER_LE_ENC)
+#define RADIO_BLE_FEAT_BIT_ENC BIT64(BT_LE_FEAT_BIT_ENC)
+#else /* !CONFIG_BLUETOOTH_CONTROLLER_LE_ENC */
+#define RADIO_BLE_FEAT_BIT_ENC 0
+#endif /* !CONFIG_BLUETOOTH_CONTROLLER_LE_ENC */
+
 #if defined(CONFIG_BLUETOOTH_CONTROLLER_LE_PING)
 #define RADIO_BLE_FEAT_BIT_PING BIT64(BT_LE_FEAT_BIT_PING)
 #else /* !CONFIG_BLUETOOTH_CONTROLLER_LE_PING */
@@ -74,9 +80,9 @@
 #define RADIO_TICKER_ID_MARKER_0	 1
 #define RADIO_TICKER_ID_PRE_EMPT	 2
 #define RADIO_TICKER_ID_ADV_STOP	 3
-#define RADIO_TICKER_ID_OBS_STOP	 4
+#define RADIO_TICKER_ID_SCAN_STOP	 4
 #define RADIO_TICKER_ID_ADV		 5
-#define RADIO_TICKER_ID_OBS		 6
+#define RADIO_TICKER_ID_SCAN		 6
 #define RADIO_TICKER_ID_FIRST_CONNECTION 7
 
 #define RADIO_TICKER_INSTANCE_ID_RADIO	 0
@@ -118,7 +124,7 @@
 
 #define RADIO_BLE_FEAT_BIT_MASK         0x1FFFF
 #define RADIO_BLE_FEAT_BIT_MASK_VALID   0x1CF2F
-#define RADIO_BLE_FEAT                  (BIT(BT_LE_FEAT_BIT_ENC) | \
+#define RADIO_BLE_FEAT                  (RADIO_BLE_FEAT_BIT_ENC | \
 					 BIT(BT_LE_FEAT_BIT_CONN_PARAM_REQ) | \
 					 BIT(BT_LE_FEAT_BIT_EXT_REJ_IND) | \
 					 BIT(BT_LE_FEAT_BIT_SLAVE_FEAT_REQ) | \
@@ -216,6 +222,11 @@ enum radio_pdu_node_rx_type {
 	NODE_RX_TYPE_DC_PDU,
 	NODE_RX_TYPE_REPORT,
 
+#if defined(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT)
+	NODE_RX_TYPE_EXT_1M_REPORT,
+	NODE_RX_TYPE_EXT_CODED_REPORT,
+#endif /* CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+
 #if defined(CONFIG_BLUETOOTH_CONTROLLER_SCAN_REQ_NOTIFY)
 	NODE_RX_TYPE_SCAN_REQ,
 #endif /* CONFIG_BLUETOOTH_CONTROLLER_SCAN_REQ_NOTIFY */
@@ -306,15 +317,27 @@ u32_t radio_init(void *hf_clock, u8_t sca, u8_t connection_count_max,
 		 u16_t packet_tx_data_size, u8_t *mem_radio,
 		 u16_t mem_size);
 void radio_ticks_active_to_start_set(u32_t ticks_active_to_start);
+/* Downstream - Advertiser */
 struct radio_adv_data *radio_adv_data_get(void);
 struct radio_adv_data *radio_scan_data_get(void);
-u32_t radio_adv_enable(u16_t interval, u8_t chl_map,
+
+#if defined(CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT)
+u32_t radio_adv_enable(u8_t phy_p, u16_t interval, u8_t chl_map,
 		       u8_t filter_policy);
+#else /* !CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+u32_t radio_adv_enable(u16_t interval, u8_t chl_map, u8_t filter_policy);
+#endif /* !CONFIG_BLUETOOTH_CONTROLLER_ADV_EXT */
+
 u32_t radio_adv_disable(void);
-u32_t radio_scan_enable(u8_t scan_type, u8_t init_addr_type,
+u32_t radio_adv_is_enabled(void);
+u32_t radio_adv_filter_pol_get(void);
+/* Downstream - Scanner */
+u32_t radio_scan_enable(u8_t type, u8_t init_addr_type,
 			u8_t *init_addr, u16_t interval,
 			u16_t window, u8_t filter_policy);
 u32_t radio_scan_disable(void);
+u32_t radio_scan_is_enabled(void);
+u32_t radio_scan_filter_pol_get(void);
 
 u32_t radio_connect_enable(u8_t adv_addr_type, u8_t *adv_addr,
 			   u16_t interval, u16_t latency,
@@ -333,5 +356,6 @@ u32_t radio_tx_mem_enqueue(u16_t handle,
 /* Callbacks */
 extern void radio_active_callback(u8_t active);
 extern void radio_event_callback(void);
+extern void ll_adv_scan_state_cb(u8_t bm);
 
 #endif
