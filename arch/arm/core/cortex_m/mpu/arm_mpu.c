@@ -78,7 +78,7 @@ void arm_core_mpu_enable(void)
 {
 	if (arm_mpu_enabled == 0) {
 		/* Enable MPU */
-		ARM_MPU_DEV->ctrl = ARM_MPU_ENABLE | ARM_MPU_PRIVDEFENA;
+		ARM_MPU_DEV->ctrl = ARM_MPU_ENABLE;
 
 		arm_mpu_enabled = 1;
 	}
@@ -141,8 +141,7 @@ static void _arm_mpu_config(void)
 		return;
 	}
 
-	/* Disable MPU */
-	ARM_MPU_DEV->ctrl = 0;
+	arm_core_mpu_disable();
 
 	/* Configure regions */
 	for (r_index = 0; r_index < mpu_config.num_regions; r_index++) {
@@ -151,10 +150,7 @@ static void _arm_mpu_config(void)
 			     mpu_config.mpu_regions[r_index].attr);
 	}
 
-	/* Enable MPU */
-	ARM_MPU_DEV->ctrl = ARM_MPU_ENABLE | ARM_MPU_PRIVDEFENA;
-
-	arm_mpu_enabled = 1;
+	arm_core_mpu_enable();
 
 	/* Make sure that all the registers are set before proceeding */
 	__DSB();
