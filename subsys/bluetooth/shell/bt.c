@@ -2014,8 +2014,11 @@ static const struct shell_cmd bt_commands[] = {
 	  "<CCC handle> <value handle> [ind]" },
 	{ "gatt-unsubscribe", cmd_gatt_unsubscribe, HELP_NONE },
 #endif /* CONFIG_BLUETOOTH_GATT_CLIENT */
+	{ "gatt-show-db", cmd_gatt_show_db, HELP_NONE },
 	{ "gatt-register-service", cmd_gatt_register_test_svc,
 	  "register pre-predefined test service" },
+	{ "gatt-unregister-service", cmd_gatt_unregister_test_svc,
+	  "unregister pre-predefined test service" },
 	{ "gatt-metrics", cmd_gatt_write_cmd_metrics,
 	  "register vendr char and measure rx [value on, off]" },
 #if defined(CONFIG_BLUETOOTH_L2CAP_DYNAMIC_CHANNEL)

@@ -18,7 +18,6 @@
 #include <bluetooth/conn.h>
 #include <bluetooth/gatt.h>
 
-#include <gatt/gap.h>
 
 #include "pong.h"
 
@@ -526,6 +525,8 @@ static struct bt_gatt_attr pong_attrs[] = {
 	BT_GATT_CCC(pong_ccc_cfg, pong_ccc_cfg_changed),
 };
 
+static struct bt_gatt_service pong_svc = BT_GATT_SERVICE(pong_attrs);
+
 void ble_init(void)
 {
 	int err;
@@ -540,8 +541,7 @@ void ble_init(void)
 
 	bt_conn_cb_register(&conn_callbacks);
 
-	gap_init(DEVICE_NAME, APPEARANCE);
 
 	local_attr = &pong_attrs[2];
-	bt_gatt_register(pong_attrs, ARRAY_SIZE(pong_attrs));
+	bt_gatt_service_register(&pong_svc);
 }
