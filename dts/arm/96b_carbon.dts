@@ -8,8 +8,8 @@
 #include <st/stm32f401.dtsi>
 
 / {
-	model = "STMicroelectronics STM32F401RE-NUCLEO board";
-	compatible = "st,stm32f401re-nucleo", "st,stm32f401";
+	model = "Seeed Studio Carbon 96boards";
+	compatible = "seeed,carbon", "st,stm32f401";
 
 	chosen {
 		zephyr,console = &usart1;
@@ -26,4 +26,34 @@
 &usart2 {
 	current-speed = <115200>;
 	status = "ok";
+};
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		boot_partition: partition@0 {
+			label = "mcuboot";
+			reg = <0x00000000 0x00008000>;
+			read-only;
+		};
+		app_state_partition: partition@c000 {
+			label = "application-state";
+			reg = <0x0000c000 0x00004000>;
+		};
+		slot0_partition: partition@20000 {
+			label = "image-0";
+			reg = <0x00020000 0x00020000>;
+		};
+		slot1_partition: partition@40000 {
+			label = "image-1";
+			reg = <0x00040000 0x00020000>;
+		};
+		scratch_partition: partition@60000 {
+			label = "image-scratch";
+			reg = <0x00060000 0x00020000>;
+		};
+	};
 };
