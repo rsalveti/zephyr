@@ -12,7 +12,7 @@
 #include <string.h>
 #include <errno.h>
 #include <misc/printk.h>
-#include <sections.h>
+#include <linker/sections.h>
 
 #include <ztest.h>
 
@@ -642,7 +642,7 @@ static void send_ipv6_fragment(void)
 
 	/* Then add some data that is over 1280 bytes long */
 	for (i = 0; i < count; i++) {
-		bool written = net_pkt_append_all(pkt, data_len, data,
+		bool written = net_pkt_append_all(pkt, data_len, (u8_t *)data,
 						  ALLOC_TIMEOUT);
 		zassert_true(written, "Cannot append data");
 

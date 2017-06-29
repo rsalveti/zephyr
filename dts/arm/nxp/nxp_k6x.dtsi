@@ -66,6 +66,15 @@
 			flash0: flash@0 {
 				reg = <0 0x100000>;
 
+				/*
+				 * If chosen's zephyr,code-partition
+				 * is unset, the image will be linked
+				 * into the entire flash device.  If
+				 * it points to an individual
+				 * partition, the code will be linked
+				 * to, and restricted to that
+				 * partition.
+				 */
 				partitions {
 					compatible = "fixed-partitions";
 					#address-cells = <1>;

@@ -216,10 +216,10 @@ config BLUETOOTH_ATT_TX_MAX
 
 config BLUETOOTH_SMP
 	bool "Security Manager Protocol support"
-	select BLUETOOTH_RPA
 	select TINYCRYPT
 	select TINYCRYPT_AES
 	select TINYCRYPT_AES_CMAC
+	select BLUETOOTH_RPA
 	help
 	  This option enables support for the Security Manager Protocol
 	  (SMP), making it possible to pair devices over LE.
@@ -275,11 +275,6 @@ config BLUETOOTH_L2CAP_DYNAMIC_CHANNEL
 	  This option enables support for LE Connection oriented Channels,
 	  allowing the creation of dynamic L2CAP Channels.
 
-config BLUETOOTH_GATT_DYNAMIC_DB
-	bool "GATT dynamic database support"
-	help
-	  This option enables GATT services to be added dynamically to database.
-
 config BLUETOOTH_GATT_CLIENT
 	bool "GATT client support"
 	help
@@ -301,6 +296,15 @@ config BLUETOOTH_DEVICE_NAME
 	help
 	  Bluetooth device name. Name can be up to 248 bytes long (excluding
 	  NULL termination). Can be empty string.
+
+config BLUETOOTH_DEVICE_APPEARANCE
+	int "Bluetooth device appearance"
+	range 0 65535
+	default 0
+	help
+	  Bluetooth device appearance. For the list of possible values please
+	  consult the following link:
+	  https://www.bluetooth.com/specifications/assigned-numbers
 
 endif # BLUETOOTH_HCI_HOST
 

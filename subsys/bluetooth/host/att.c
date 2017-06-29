@@ -155,7 +155,9 @@ static void att_req_sent(struct bt_conn *conn)
 	k_sem_give(&att->tx_sem);
 
 	/* Start timeout work */
-	k_delayed_work_submit(&att->timeout_work, ATT_TIMEOUT);
+	if (att->req) {
+		k_delayed_work_submit(&att->timeout_work, ATT_TIMEOUT);
+	}
 }
 
 static void att_pdu_sent(struct bt_conn *conn)
@@ -2130,6 +2132,8 @@ void bt_att_init(void)
 	};
 
 	bt_l2cap_le_fixed_chan_register(&chan);
+
+	bt_gatt_init();
 }
 
 u16_t bt_att_get_mtu(struct bt_conn *conn)

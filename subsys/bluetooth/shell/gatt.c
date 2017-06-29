@@ -103,7 +103,7 @@ static u8_t discover_func(struct bt_conn *conn,
 			     const struct bt_gatt_attr *attr,
 			     struct bt_gatt_discover_params *params)
 {
-	struct bt_gatt_service *gatt_service;
+	struct bt_gatt_service_val *gatt_service;
 	struct bt_gatt_chrc *gatt_chrc;
 	struct bt_gatt_include *gatt_include;
 	char uuid[37];
@@ -483,6 +483,21 @@ int cmd_gatt_unsubscribe(int argc, char *argv[])
 }
 #endif /* CONFIG_BLUETOOTH_GATT_CLIENT */
 
+static u8_t print_attr(const struct bt_gatt_attr *attr, void *user_data)
+{
+	printk("attr %p handle 0x%04x uuid %s perm 0x%02x\n",
+		attr, attr->handle, bt_uuid_str(attr->uuid), attr->perm);
+
+	return BT_GATT_ITER_CONTINUE;
+}
+
+int cmd_gatt_show_db(int argc, char *argv[])
+{
+	bt_gatt_foreach_attr(0x0001, 0xffff, print_attr, NULL);
+
+	return 0;
+}
+
 /* Custom Service Variables */
 static struct bt_uuid_128 vnd_uuid = BT_UUID_INIT_128(
 	0xf0, 0xde, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x12,
@@ -585,11 +600,22 @@ static struct bt_gatt_attr vnd_attrs[] = {
 				&vnd_long_value2),
 };
 
+static struct bt_gatt_service vnd_svc = BT_GATT_SERVICE(vnd_attrs);
+
 int cmd_gatt_register_test_svc(int argc, char *argv[])
 {
-	bt_gatt_register(vnd_attrs, ARRAY_SIZE(vnd_attrs));
+	bt_gatt_service_register(&vnd_svc);
 
 	printk("Registering test vendor service\n");
+
+	return 0;
+}
+
+int cmd_gatt_unregister_test_svc(int argc, char *argv[])
+{
+	bt_gatt_service_unregister(&vnd_svc);
+
+	printk("Unregistering test vendor service\n");
 
 	return 0;
 }
@@ -665,6 +691,8 @@ static struct bt_gatt_attr met_attrs[] = {
 			   read_met, write_met, met_char_value),
 };
 
+static struct bt_gatt_service met_svc = BT_GATT_SERVICE(met_attrs);
+
 int cmd_gatt_write_cmd_metrics(int argc, char *argv[])
 {
 	int err = 0;
@@ -681,8 +709,7 @@ int cmd_gatt_write_cmd_metrics(int argc, char *argv[])
 
 		if (!registered) {
 			printk("Registering GATT metrics test Service.\n");
-			err = bt_gatt_register(met_attrs,
-					       ARRAY_SIZE(met_attrs));
+			err = bt_gatt_service_register(&met_svc);
 			registered = true;
 		}
 	} else if (!strcmp(argv[1], "off")) {
