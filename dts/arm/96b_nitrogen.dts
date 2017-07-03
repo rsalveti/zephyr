@@ -49,7 +49,18 @@
 		};
 		app_state_partition: partition@7d000 {
 			label = "application-state";
-			reg = <0x0007d000 0x3000>;
+			reg = <0x0007d000 0x2000>;
 		};
+
+		/*
+		 * HACK: put this here for now. Later on, let's deal with
+		 * this in the overlay files once we can clean up the
+		 * upstream usage.
+		 */
+		credentials_partition: partition@7f000 {
+			label = "lwm2m-credentials";
+			reg = <0x0007f000 0x1000>;
+		};
+
 	};
 };
