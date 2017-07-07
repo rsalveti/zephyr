@@ -167,6 +167,10 @@ static int lwm2m_setup(void)
 	lwm2m_firmware_set_write_cb(firmware_block_received_cb);
 	lwm2m_engine_register_exec_callback("5/0/2", firmware_update_cb);
 
+	/* setup TEMP SENSOR object */
+
+	lwm2m_engine_create_obj_inst("3303/0");
+
 	return 0;
 }
 
