@@ -141,9 +141,11 @@ static void ipv6_event_handler(struct net_mgmt_event_callback *cb,
 			return;
 		}
 
+#if defined(CONFIG_NET_DEBUG_APP) && CONFIG_SYS_LOG_NET_LEVEL > 1
 		NET_INFO("IPv6 address: %s",
 			 net_addr_ntop(AF_INET6, &laddr, hr_addr,
 				       NET_IPV6_ADDR_LEN));
+#endif
 
 		k_sem_take(&counter, K_NO_WAIT);
 		k_sem_give(&waiter);

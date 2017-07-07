@@ -16,6 +16,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <misc/printk.h>
 
 #include <net/net_core.h>
 #include <net/net_ip.h>
