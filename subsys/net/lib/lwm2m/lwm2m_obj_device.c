@@ -80,8 +80,8 @@ static s32_t time_temp;
 static u32_t time_offset;
 static u8_t  binding_mode[DEVICE_STRING_SHORT];
 static u8_t  device_type[DEVICE_STRING_LONG];
-static u8_t  hardware_version[DEVICE_STRING_SHORT];
-static u8_t  software_version[DEVICE_STRING_SHORT];
+static u8_t  hardware_version[DEVICE_STRING_LONG];
+static u8_t  software_version[DEVICE_STRING_LONG];
 static u8_t  battery_status;
 static s32_t mem_total_kb;
 
@@ -320,9 +320,9 @@ static struct lwm2m_engine_obj_inst *device_create(u16_t obj_inst_id)
 	INIT_OBJ_RES_DATA(res, i, DEVICE_TYPE_ID,
 		device_type, DEVICE_STRING_LONG);
 	INIT_OBJ_RES_DATA(res, i, DEVICE_HARDWARE_VERSION_ID,
-		hardware_version, DEVICE_STRING_SHORT);
+		hardware_version, DEVICE_STRING_LONG);
 	INIT_OBJ_RES_DATA(res, i, DEVICE_SOFTWARE_VERSION_ID,
-		software_version, DEVICE_STRING_SHORT);
+		software_version, DEVICE_STRING_LONG);
 	INIT_OBJ_RES_DATA(res, i, DEVICE_BATTERY_STATUS_ID,
 		&battery_status, sizeof(battery_status));
 	INIT_OBJ_RES_DATA(res, i, DEVICE_MEMORY_TOTAL_ID,
