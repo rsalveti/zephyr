@@ -19,7 +19,7 @@ if NET_APP
 
 config NET_APP_AUTO_INIT
 	bool "Init networking support automatically during device startup"
-	default y
+	default y if !NET_L2_BLUETOOTH
 	help
 	If this option is set, then the net_app API is automatically
 	initialized when the device is started. If you do not wish to do
