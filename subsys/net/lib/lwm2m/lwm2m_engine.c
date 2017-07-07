@@ -487,7 +487,8 @@ static void zoap_options_to_path(struct zoap_option *opt, int options_count,
 
 int zoap_init_message(struct net_context *net_ctx, struct zoap_packet *zpkt,
 		      struct net_pkt **pkt, u8_t type, u8_t code, u16_t mid,
-		      const u8_t *token, u8_t tkl, zoap_reply_t reply_cb)
+		      const u8_t *token, u8_t tkl, struct zoap_reply *replies,
+		      zoap_reply_t reply_cb)
 {
 	struct net_buf *frag;
 	struct zoap_reply *reply = NULL;
@@ -534,7 +535,7 @@ int zoap_init_message(struct net_context *net_ctx, struct zoap_packet *zpkt,
 	}
 
 	/* set the reply handler */
-	if (reply_cb) {
+	if (replies && reply_cb) {
 		reply = zoap_reply_next_unused(replies, NUM_REPLIES);
 		if (!reply) {
 			SYS_LOG_ERR("No resources for waiting for replies.");
@@ -2199,7 +2200,7 @@ static void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 					      ZOAP_TYPE_ACK,
 					      zoap_header_get_code(&response),
 					      zoap_header_get_id(&response),
-					      NULL, -1, NULL);
+					      NULL, -1, NULL, NULL);
 			if (r < 0) {
 				if (pkt2) {
 					net_pkt_unref(pkt2);
@@ -2336,7 +2337,7 @@ static int generate_notify_message(struct observe_node *obs,
 
 	ret = zoap_init_message(obs->net_ctx, out.out_zpkt, &pkt,
 				ZOAP_TYPE_CON, ZOAP_RESPONSE_CODE_CONTENT,
-				0, obs->token, obs->tkl,
+				0, obs->token, obs->tkl, replies,
 				notify_message_reply_cb);
 	if (ret) {
 		goto cleanup;

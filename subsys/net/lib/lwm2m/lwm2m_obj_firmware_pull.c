@@ -84,6 +84,14 @@ firmware_udp_receive(struct net_context *ctx, struct net_pkt *pkt, int status,
 	}
 
 	token = zoap_header_get_token(&response, &tkl);
+
+	SYS_LOG_DBG("MESSAGE INFO RX type:%d code:%d.%d mid:%d token:'%s'",
+		zoap_header_get_type(&response),
+		ZOAP_RESPONSE_CODE_CLASS(zoap_header_get_code(&response)),
+		ZOAP_RESPONSE_CODE_DETAIL(zoap_header_get_code(&response)),
+		zoap_header_get_id(&response),
+		sprint_token(token, tkl));
+
 	pending = zoap_pending_received(&response, pendings,
 					NUM_PENDINGS);
 	if (pending) {
@@ -95,7 +103,12 @@ firmware_udp_receive(struct net_context *ctx, struct net_pkt *pkt, int status,
 	reply = zoap_response_received(&response, &from_addr,
 				       replies, NUM_REPLIES);
 	if (!reply) {
-		SYS_LOG_ERR("No handler for response");
+		if (zoap_header_get_type(&response) == ZOAP_TYPE_ACK) {
+			SYS_LOG_DBG("ACK wihout reply, separated response");
+		} else {
+			SYS_LOG_ERR("No handler for response");
+			/* TODO: reset the connection */
+		}
 	} else {
 		SYS_LOG_DBG("reply handled reply:%p", reply);
 		zoap_reply_clear(reply);
@@ -132,64 +145,43 @@ static void retransmit_request(struct k_work *work)
 	k_delayed_work_submit(&retransmit_work, pending->timeout);
 }
 
-static int transfer_request(struct zoap_block_context *ctx,
+static int transfer_request(struct zoap_block_context *blk_ctx,
 			    const u8_t *token, u8_t tkl,
 			    zoap_reply_t reply_cb)
 {
 	struct zoap_packet request;
 	struct net_pkt *pkt = NULL;
 	struct zoap_pending *pending;
-	struct net_buf *frag;
-	struct zoap_reply *reply = NULL;
 	int ret;
 
-	/* send request */
-	pkt = net_pkt_get_tx(firmware_net_ctx, K_FOREVER);
-	if (!pkt) {
-		SYS_LOG_ERR("Unable to get TX packet, not enough memory.");
-		return -ENOMEM;
-	}
-
-	frag = net_pkt_get_data(firmware_net_ctx, K_FOREVER);
-	if (!frag) {
-		SYS_LOG_ERR("Unable to get DATA buffer, not enough memory.");
-		ret = -ENOMEM;
+	ret = zoap_init_message(firmware_net_ctx, &request, &pkt,
+			ZOAP_TYPE_CON, ZOAP_METHOD_GET, 0, token, tkl,
+			replies, reply_cb);
+	if (ret) {
 		goto cleanup;
 	}
 
-	net_pkt_frag_add(pkt, frag);
-
-	ret = zoap_packet_init(&request, pkt);
+#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_HTTP_PROXY_SUPPORT)
+	char *uri_path =
+		CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_HTTP_PROXY_URI_PATH;
+	ret = zoap_add_option(&request, ZOAP_OPTION_URI_PATH,
+				uri_path, strlen(uri_path));
 	if (ret < 0) {
-		SYS_LOG_ERR("zoap packet init error (err:%d)", ret);
-		return ret;
+		SYS_LOG_ERR("Error adding URI_PATH '%s'", uri_path);
+		goto cleanup;
 	}
-
-	/* FIXME: Could be that zoap_packet_init() sets some defaults */
-	zoap_header_set_version(&request, 1);
-	zoap_header_set_type(&request, ZOAP_TYPE_CON);
-	zoap_header_set_code(&request, ZOAP_METHOD_GET);
-	zoap_header_set_id(&request, zoap_next_id());
-
-	if (token && tkl > 0) {
-		zoap_header_set_token(&request, token, tkl);
-	} else if (tkl == 0) {
-		zoap_header_set_token(&request, zoap_next_token(), 8);
+	ret = zoap_add_block2_option(&request, blk_ctx);
+	if (ret) {
+		SYS_LOG_ERR("Unable to add block2 option (err:%d).", ret);
+		goto cleanup;
 	}
-
-	/* set the reply handler */
-	if (reply_cb) {
-		reply = zoap_reply_next_unused(replies, NUM_REPLIES);
-		if (!reply) {
-			SYS_LOG_ERR("No resources for waiting for replies.");
-			ret = -ENOMEM;
-			goto cleanup;
-		}
-
-		zoap_reply_init(reply, &request);
-		reply->reply = reply_cb;
+	ret = zoap_add_option(&request, ZOAP_OPTION_PROXY_URI,
+			firmware_uri, strlen(firmware_uri));
+	if (ret < 0) {
+		SYS_LOG_ERR("Error adding PROXY_URI '%s'", firmware_uri);
+		goto cleanup;
 	}
-
+#else
 	/* hard code URI path here -- should be pulled from package_uri */
 	ret = zoap_add_option(&request, ZOAP_OPTION_URI_PATH,
 			"large-create", strlen("large-create"));
@@ -199,12 +191,12 @@ static int transfer_request(struct zoap_block_context *ctx,
 		SYS_LOG_ERR("Error adding URI_QUERY 'large'");
 		goto cleanup;
 	}
-
-	ret = zoap_add_block2_option(&request, ctx);
+	ret = zoap_add_block2_option(&request, blk_ctx);
 	if (ret) {
 		SYS_LOG_ERR("Unable to add block2 option.");
 		goto cleanup;
 	}
+#endif
 
 	pending = zoap_pending_next_unused(pendings, NUM_PENDINGS);
 	if (!pending) {
@@ -220,6 +212,11 @@ static int transfer_request(struct zoap_block_context *ctx,
 			    "retransmission (err:%d).", ret);
 		goto cleanup;
 	}
+
+	SYS_LOG_DBG("MESSAGE INFO TX type:%d mid:%d token:'%s'",
+			zoap_header_get_type(&request),
+			zoap_header_get_id(&request),
+			sprint_token(token, tkl));
 
 	ret = net_context_sendto(pkt, &firmware_addr, NET_SOCKADDR_MAX_SIZE,
 				 NULL, 0, NULL, NULL);
@@ -242,14 +239,44 @@ cleanup:
 	return ret;
 }
 
+static int transfer_empty_ack(u16_t mid)
+{
+	struct zoap_packet request;
+	struct net_pkt *pkt = NULL;
+	int ret;
+
+	ret = zoap_init_message(firmware_net_ctx, &request, &pkt,
+		ZOAP_TYPE_ACK, ZOAP_CODE_EMPTY, mid, NULL, -1, NULL, NULL);
+	if (ret) {
+		goto cleanup;
+	}
+
+	SYS_LOG_DBG("MESSAGE INFO TX ACK mid:%d", mid);
+
+	ret = net_context_sendto(pkt, &firmware_addr, NET_SOCKADDR_MAX_SIZE,
+				 NULL, 0, NULL, NULL);
+	if (ret < 0) {
+		SYS_LOG_ERR("Error sending LWM2M packet (err:%d).",
+			    ret);
+		goto cleanup;
+	}
+
+	return 0;
+
+cleanup:
+	if (pkt) {
+		net_pkt_unref(pkt);
+	}
+
+	return ret;
+}
+
 static int
 do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 			      struct zoap_reply *reply,
 			      const struct sockaddr *from)
 {
 	int ret;
-	const u8_t *token;
-	u8_t tkl;
 	u16_t payload_len;
 	u8_t *payload;
 	struct zoap_packet *check_response = (struct zoap_packet *)response;
@@ -262,16 +289,17 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 		SYS_LOG_ERR("Error from block update: %d", ret);
 		return ret;
 	}
+	SYS_LOG_DBG("Block: total: %zd, current: %zd",
+			    firmware_block_ctx.total_size,
+			    firmware_block_ctx.current);
 
 	/* TODO: Process incoming data */
 	payload = zoap_packet_get_payload(check_response, &payload_len);
 	if (payload_len > 0) {
+		SYS_LOG_DBG("packet payload len %d", payload_len);
+
 		/* TODO: Determine when to actually advance to next block */
 		zoap_next_block(&firmware_block_ctx);
-
-		SYS_LOG_DBG("total: %zd, current: %zd",
-			    firmware_block_ctx.total_size,
-			    firmware_block_ctx.current);
 
 		/* callback */
 		callback = lwm2m_firmware_get_write_cb();
@@ -283,10 +311,15 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 		}
 	}
 
+	ret = transfer_empty_ack(zoap_header_get_id(check_response));
+	if (ret < 0) {
+		SYS_LOG_ERR("Error transmitting ACK");
+		return ret;
+	}
+
 	/* TODO: Determine actual completion criteria */
 	if (firmware_block_ctx.current < firmware_block_ctx.total_size) {
-		token = zoap_header_get_token(check_response, &tkl);
-		ret = transfer_request(&firmware_block_ctx, token, tkl,
+		ret = transfer_request(&firmware_block_ctx, zoap_next_token(), 8,
 				       do_firmware_transfer_reply_cb);
 	}
 
@@ -326,30 +359,47 @@ static void firmware_transfer(struct k_work *work)
 					       .sin_family = AF_INET };
 #endif
 	struct net_if *iface;
+	char *server_addr;
 	int ret, port, family;
 
 	/* Server Peer IP information */
+#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_HTTP_PROXY_SUPPORT)
+	/*
+	 * TODO: find a better way to decide which protocol to use.
+	 * For now just prefer IPv6 over IPv4
+	 */
+#if defined(CONFIG_NET_IPV6)
+	family = AF_INET6;
+#else
+	family = AF_INET;
+#endif
+	/* Server and port are fixed when using a CoAP-HTTP proxy */
+	server_addr = CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_HTTP_PROXY_ADDR;
+	port = CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_HTTP_PROXY_PORT;
+#else
 	/* TODO: use parser on firmware_uri to determine IP version + port */
 	/* TODO: hard code IPv4 + port for now */
 	port = 5685;
 	family = AF_INET;
+	/* HACK: use firmware_uri directly as IP address */
+	server_addr = firmware_uri;
+#endif
 
 #if defined(CONFIG_NET_IPV6)
 	if (family == AF_INET6) {
 		firmware_addr.family = family;
-		/* HACK: use firmware_uri directly as IP address */
-		net_addr_pton(firmware_addr.family, firmware_uri,
+		net_addr_pton(firmware_addr.family, server_addr,
 			      &net_sin6(&firmware_addr)->sin6_addr);
-		net_sin6(&firmware_addr)->sin6_port = htons(5685);
+		net_sin6(&firmware_addr)->sin6_port = htons(port);
 	}
 #endif
 
 #if defined(CONFIG_NET_IPV4)
 	if (family == AF_INET) {
 		firmware_addr.family = family;
-		net_addr_pton(firmware_addr.family, firmware_uri,
+		net_addr_pton(firmware_addr.family, server_addr,
 			      &net_sin(&firmware_addr)->sin_addr);
-		net_sin(&firmware_addr)->sin_port = htons(5685);
+		net_sin(&firmware_addr)->sin_port = htons(port);
 	}
 #endif
 
@@ -387,7 +437,7 @@ static void firmware_transfer(struct k_work *work)
 		goto cleanup;
 	}
 
-	SYS_LOG_DBG("Attached to port: %d", port);
+	SYS_LOG_DBG("Attached to server %s, port %d", server_addr, port);
 	ret = net_context_recv(firmware_net_ctx, firmware_udp_receive, 0, NULL);
 	if (ret) {
 		SYS_LOG_ERR("Could not set receive for net context (err:%d)",
@@ -396,9 +446,9 @@ static void firmware_transfer(struct k_work *work)
 	}
 
 	/* reset block transfer context */
-	zoap_block_transfer_init(&firmware_block_ctx, default_block_size, 0);
+	zoap_block_transfer_init(&firmware_block_ctx, default_block_size(), 0);
 
-	transfer_request(&firmware_block_ctx, NULL, 0,
+	transfer_request(&firmware_block_ctx, zoap_next_token(), 8,
 			 do_firmware_transfer_reply_cb);
 	return;
 

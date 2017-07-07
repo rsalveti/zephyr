@@ -36,7 +36,8 @@ int  get_or_create_engine_obj(struct lwm2m_engine_context *context,
 int check_perm(u16_t obj_id, u16_t res_id, u8_t perm);
 int zoap_init_message(struct net_context *net_ctx, struct zoap_packet *zpkt,
 		      struct net_pkt **pkt, u8_t type, u8_t code, u16_t mid,
-		      const u8_t *token, u8_t tkl, zoap_reply_t reply_cb);
+		      const u8_t *token, u8_t tkl, struct zoap_reply *replies,
+		      zoap_reply_t reply_cb);
 u16_t lwm2m_engine_get_rd_data(u8_t *client_data, u16_t size);
 
 int engine_read_handler(struct lwm2m_engine_obj_inst *obj_inst,

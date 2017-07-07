@@ -111,6 +111,7 @@ struct k_thread lwm2m_rd_client_thread_data;
 #define NUM_REPLIES	CONFIG_LWM2M_ENGINE_MAX_REPLIES
 
 extern struct zoap_pending pendings[NUM_PENDINGS];
+extern struct zoap_reply replies[NUM_REPLIES];
 extern struct k_delayed_work retransmit_work;
 
 /* buffers */
@@ -387,7 +388,7 @@ static int sm_do_bootstrap(int index)
 		ret = zoap_init_message(clients[index].net_ctx,
 					&request, &pkt, ZOAP_TYPE_CON,
 					ZOAP_METHOD_POST, 0, NULL, 0,
-					do_bootstrap_reply_cb);
+					replies, do_bootstrap_reply_cb);
 		if (ret) {
 			goto cleanup;
 		}
@@ -503,7 +504,7 @@ static int sm_send_registration(int index, bool send_obj_support_data,
 	ret = zoap_init_message(clients[index].net_ctx,
 				&request, &pkt, ZOAP_TYPE_CON,
 				ZOAP_METHOD_POST, 0, NULL, 0,
-				reply_cb);
+				replies, reply_cb);
 	if (ret) {
 		goto cleanup;
 	}
@@ -641,7 +642,7 @@ static int sm_do_deregister(int index)
 	ret = zoap_init_message(clients[index].net_ctx,
 				&request, &pkt, ZOAP_TYPE_CON,
 				ZOAP_METHOD_DELETE, 0, NULL, 0,
-				do_deregister_reply_cb);
+				replies, do_deregister_reply_cb);
 	if (ret) {
 		goto cleanup;
 	}
