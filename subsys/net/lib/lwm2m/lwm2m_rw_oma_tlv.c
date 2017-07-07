@@ -314,18 +314,50 @@ static size_t put_float32fix(struct lwm2m_output_context *out,
 			     float32_value_t *value)
 {
 	size_t len;
-	s32_t binary32 = 0, net_binary32 = 0;
 	struct oma_tlv tlv;
 	u8_t *buffer = &out->outbuf[out->outlen];
+	int e = 0;
+	s32_t val = 0;
+	s32_t v;
+	u8_t b[4];
 
-	/* TODO */
+	/* HACK: ignore value->val2 (decimal portion) and use only val1. */
+	int bits = 0;
 
-	net_binary32 = sys_cpu_to_be32(binary32);
+	v = value->val1;
+	if (v < 0) {
+		v = -v;
+	}
+
+	while (v > 1) {
+		val = (val >> 1);
+
+		if (v & 1) {
+			val = val | (1L << 22);
+		}
+
+		v = (v >> 1);
+		e++;
+	}
+
+	/* convert to the thing we should have */
+	e = e - bits + 127;
+	if (value->val1 == 0) {
+		e = 0;
+	}
+
+	/* is this the right byte order? */
+	b[0] = (value->val1 < 0 ? 0x80 : 0) | (e >> 1);
+	b[1] = ((e & 1) << 7) | ((val >> 16) & 0x7f);
+	b[2] = (val >> 8) & 0xff;
+	b[3] = val & 0xff;
+
 	tlv_setup(&tlv, tlv_calc_type(out->writer_flags),
 		  tlv_calc_id(out->writer_flags, path),
-		  sizeof(net_binary32), (u8_t *)&net_binary32);
+		  4, b);
 	len = oma_tlv_put(&tlv, buffer, out->outsize - out->outlen);
 	out->outlen += len;
+
 	return len;
 }
 
@@ -446,13 +478,32 @@ static size_t get_float32fix(struct lwm2m_input_context *in,
 {
 	struct oma_tlv tlv;
 	size_t size = oma_tlv_get(&tlv, in->inbuf, in->insize);
+	int e;
+	s32_t val;
+	int sign = (tlv.value[0] & 0x80) != 0;
+	int bits = 0;
 
 	if (size > 0) {
-		if (tlv.length != 4) {
-			SYS_LOG_ERR("invalid length: %u (not 4)", tlv.length);
-			return 0;
+		/* TLV needs to be 4 bytes */
+		e = ((tlv.value[0] << 1) & 0xff) | (tlv.value[1] >> 7);
+		val = (((long)tlv.value[1] & 0x7f) << 16) | (tlv.value[2] << 8) |
+			tlv.value[3];
+		e = e - 127 + bits;
+
+		/* e corresponds to the number of times we need to roll the number */
+		SYS_LOG_DBG("Actual e=%d", e);
+		e = e - 23;
+		SYS_LOG_DBG("E after sub %d", e);
+		val = val | 1L << 23;
+		if (e > 0) {
+			val = val << e;
+		} else {
+			val = val >> -e;
 		}
 
+		value->val1 = sign ? -val : val;
+		/* HACK: ignore decimal place values */
+		value->val2 = 0;
 		in->last_value_len = tlv.length;
 	}
 
