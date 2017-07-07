@@ -624,14 +624,15 @@ struct zoap_reply *zoap_response_received(
 
 	for (i = 0, r = replies; i < len; i++, r++) {
 		int age;
-
-		if ((r->id == 0) &&
-		    (r->tkl == 0 || r->tkl != tkl)) {
+		if ((r->id == 0) && (r->tkl == 0)) {
 			continue;
 		}
-
-		if ((r->id != id) ||
-		    (tkl > 0 && memcmp(r->token, token, tkl))) {
+		/* Piggybacked must match id when token is empty */
+		if ((r->id != id) && (tkl == 0)) {
+			continue;
+		}
+		/* Separate response must only match token */
+		if (tkl > 0 && memcmp(r->token, token, tkl)) {
 			continue;
 		}
 
