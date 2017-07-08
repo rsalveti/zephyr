@@ -125,19 +125,19 @@ static struct lwm2m_engine_res_inst res[DEVICE_MAX_ID];
 static int reboot_cb(u16_t obj_inst_id)
 {
 	SYS_LOG_DBG("REBOOT");
-	return 1;
+	return -EPERM;
 }
 
 static int factory_default_cb(u16_t obj_inst_id)
 {
 	SYS_LOG_DBG("FACTORY_DEFAULT");
-	return 1;
+	return -EPERM;
 }
 
 static int reset_error_list_cb(u16_t obj_inst_id)
 {
 	error_code_count = 0;
-	return 1;
+	return 0;
 }
 
 static void *current_time_read_cb(u16_t obj_inst_id, size_t *data_len)

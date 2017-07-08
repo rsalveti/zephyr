@@ -1621,8 +1621,7 @@ int engine_exec_handler(struct lwm2m_engine_obj *obj,
 	}
 
 	if (res->execute_cb) {
-		res->execute_cb(obj_inst->obj_inst_id);
-		return 0;
+		return res->execute_cb(obj_inst->obj_inst_id);
 	}
 
 	/* TODO: something else to handle for execute? */

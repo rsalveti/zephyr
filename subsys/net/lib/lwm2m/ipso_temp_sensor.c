@@ -68,11 +68,11 @@ static int reset_min_max_measured_values_cb(u16_t obj_inst_id)
 			min_measured_value[i].val2 = 0;
 			max_measured_value[i].val1 = 0;
 			max_measured_value[i].val2 = 0;
-			return 1;
+			return 0;
 		}
 	}
 
-	return 0;
+	return -ENOENT;
 }
 
 static int sensor_value_write_cb(u16_t obj_inst_id,

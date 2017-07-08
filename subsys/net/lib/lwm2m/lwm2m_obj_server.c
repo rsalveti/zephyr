@@ -73,20 +73,20 @@ static int disable_cb(u16_t obj_inst_id)
 	for (i = 0; i < MAX_INSTANCE_COUNT; i++) {
 		if (inst[i].obj && inst[i].obj_inst_id == obj_inst_id) {
 			server_flag_disabled[i] = 1;
-			return 1;
+			return 0;
 		}
 	}
 
-	return 0;
+	return -ENOENT;
 }
 
 static int update_trigger_cb(u16_t obj_inst_id)
 {
 #ifdef CONFIG_LWM2M_RD_CLIENT_SUPPORT
 	engine_trigger_update();
-	return 1;
-#else
 	return 0;
+#else
+	return -EPERM;
 #endif
 }
 
