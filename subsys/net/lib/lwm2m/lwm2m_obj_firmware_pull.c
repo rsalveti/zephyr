@@ -103,15 +103,12 @@ firmware_udp_receive(struct net_context *ctx, struct net_pkt *pkt, int status,
 	reply = zoap_response_received(&response, &from_addr,
 				       replies, NUM_REPLIES);
 	if (!reply) {
-		if (zoap_header_get_type(&response) == ZOAP_TYPE_ACK) {
-			SYS_LOG_DBG("ACK wihout reply, separated response");
-		} else {
-			SYS_LOG_ERR("No handler for response");
-			/* TODO: reset the connection */
-		}
+		SYS_LOG_ERR("No handler for response");
 	} else {
 		SYS_LOG_DBG("reply handled reply:%p", reply);
-		zoap_reply_clear(reply);
+		if (zoap_header_get_type(&response) != ZOAP_TYPE_ACK) {
+			zoap_reply_clear(reply);
+		}
 	}
 
 cleanup:
@@ -286,7 +283,11 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 	lwm2m_engine_set_data_cb_t callback;
 	bool last_block = false;
 
-	SYS_LOG_DBG("TRANSFER REPLY");
+	/* TODO: handle TYPE_RESET */
+	if (zoap_header_get_type(response) == ZOAP_TYPE_ACK) {
+		SYS_LOG_DBG("ACK, separated response");
+		return 0;
+	}
 
 	ret = zoap_update_from_block(check_response, &firmware_block_ctx);
 	if (ret < 0) {
