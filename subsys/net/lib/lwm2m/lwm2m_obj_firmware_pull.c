@@ -236,6 +236,9 @@ cleanup:
 		net_pkt_unref(pkt);
 	}
 
+	lwm2m_engine_set_u8("5/0/5", RESULT_UPDATE_FAILED);
+	lwm2m_engine_set_u8("5/0/3", STATE_IDLE);
+
 	return ret;
 }
 
@@ -281,6 +284,7 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 	u8_t *payload;
 	struct zoap_packet *check_response = (struct zoap_packet *)response;
 	lwm2m_engine_set_data_cb_t callback;
+	bool last_block = false;
 
 	SYS_LOG_DBG("TRANSFER REPLY");
 
@@ -293,32 +297,36 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 			    firmware_block_ctx.total_size,
 			    firmware_block_ctx.current);
 
-	/* TODO: Process incoming data */
-	payload = zoap_packet_get_payload(check_response, &payload_len);
-	if (payload_len > 0) {
-		SYS_LOG_DBG("packet payload len %d", payload_len);
-
-		/* TODO: Determine when to actually advance to next block */
-		zoap_next_block(&firmware_block_ctx);
-
-		/* callback */
-		callback = lwm2m_firmware_get_write_cb();
-		if (callback) {
-			callback(0, payload, payload_len,
-				(firmware_block_ctx.current ==
-					firmware_block_ctx.total_size),
-				firmware_block_ctx.total_size);
-		}
-	}
-
 	ret = transfer_empty_ack(zoap_header_get_id(check_response));
 	if (ret < 0) {
 		SYS_LOG_ERR("Error transmitting ACK");
 		return ret;
 	}
 
-	/* TODO: Determine actual completion criteria */
-	if (firmware_block_ctx.current < firmware_block_ctx.total_size) {
+	payload = zoap_packet_get_payload(check_response, &payload_len);
+	if (payload_len > 0) {
+		last_block = firmware_block_ctx.current + payload_len ==
+					 firmware_block_ctx.total_size;
+		SYS_LOG_DBG("packet payload len %d, last block: %d",
+				payload_len, last_block);
+
+		/* application callback */
+		callback = lwm2m_firmware_get_write_cb();
+		if (callback) {
+			ret = callback(0, payload, payload_len, last_block,
+					firmware_block_ctx.total_size);
+			if (ret < 0) {
+				SYS_LOG_ERR("Callback failure (%d)", ret);
+				return ret;
+			}
+		}
+	}
+
+	if (last_block) {
+		lwm2m_engine_set_u8("5/0/3", STATE_DOWNLOADED);
+		lwm2m_engine_set_u8("5/0/5", RESULT_DEFAULT);
+	} else {
+		zoap_next_block(&firmware_block_ctx);
 		ret = transfer_request(&firmware_block_ctx, zoap_next_token(), 8,
 				       do_firmware_transfer_reply_cb);
 	}
@@ -448,6 +456,9 @@ static void firmware_transfer(struct k_work *work)
 	/* reset block transfer context */
 	zoap_block_transfer_init(&firmware_block_ctx, default_block_size(), 0);
 
+	lwm2m_engine_set_u8("5/0/5", RESULT_DEFAULT);
+	lwm2m_engine_set_u8("5/0/3", STATE_DOWNLOADING);
+
 	transfer_request(&firmware_block_ctx, zoap_next_token(), 8,
 			 do_firmware_transfer_reply_cb);
 	return;
@@ -456,6 +467,9 @@ cleanup:
 	if (firmware_net_ctx) {
 		net_context_put(firmware_net_ctx);
 	}
+
+	lwm2m_engine_set_u8("5/0/5", RESULT_UPDATE_FAILED);
+	lwm2m_engine_set_u8("5/0/3", STATE_IDLE);
 }
 
 /* TODO: */

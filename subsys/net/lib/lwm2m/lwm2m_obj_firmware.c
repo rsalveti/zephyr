@@ -64,11 +64,30 @@ static lwm2m_engine_set_data_cb_t write_cb;
 extern int lwm2m_firmware_start_transfer(char *package_uri);
 #endif
 
+static int firmware_update_cb(u16_t obj_inst_id)
+{
+	return -EPERM;
+}
+
+static void reset_state_machine()
+{
+	SYS_LOG_DBG("Firmware Update state machine reset");
+
+	lwm2m_engine_set_u8("5/0/3", STATE_IDLE);
+	lwm2m_engine_set_u8("5/0/5", RESULT_DEFAULT);
+}
+
 static int package_write_cb(u16_t obj_inst_id,
 			    u8_t *data, u16_t data_len,
 			    bool last_block, size_t total_size)
 {
-	SYS_LOG_DBG("PACKAGE WRITE");
+	SYS_LOG_DBG("Package write: data len: %d", data_len);
+
+	if (!data_len) {
+		reset_state_machine();
+		return 1;
+	}
+
 	if (write_cb) {
 		write_cb(obj_inst_id, data, data_len, last_block, total_size);
 		return 1;
@@ -81,7 +100,21 @@ static int package_uri_write_cb(u16_t obj_inst_id,
 				u8_t *data, u16_t data_len,
 				bool last_block, size_t total_size)
 {
-	SYS_LOG_DBG("PACKAGE_URI WRITE: %s", package_uri);
+	if (update_state == STATE_DOWNLOADING) {
+		SYS_LOG_ERR("Cannot update with download in progress");
+		return 0;
+	}
+
+	SYS_LOG_DBG("Package URI write: data len: %d", data_len);
+
+	if (!data_len) {
+		reset_state_machine();
+		return 1;
+	}
+
+	/* TODO: Validate protocol type */
+	lwm2m_engine_set_u8("5/0/3", STATE_IDLE);
+
 #ifdef CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_SUPPORT
 	lwm2m_firmware_start_transfer(package_uri);
 	return 1;
@@ -109,7 +142,8 @@ static struct lwm2m_engine_obj_inst *firmware_create(u16_t obj_inst_id)
 	INIT_OBJ_RES(res, i, FIRMWARE_PACKAGE_URI_ID, 0,
 		package_uri, PACKAGE_URI_LEN,
 		NULL, NULL, package_uri_write_cb, NULL);
-	INIT_OBJ_RES_DUMMY(res, i, FIRMWARE_UPDATE_ID);
+	INIT_OBJ_RES_EXECUTE(res, i, FIRMWARE_UPDATE_ID,
+		firmware_update_cb);
 	INIT_OBJ_RES_DATA(res, i, FIRMWARE_STATE_ID,
 		&update_state, sizeof(update_state));
 	INIT_OBJ_RES_DATA(res, i, FIRMWARE_UPDATE_RESULT_ID,
