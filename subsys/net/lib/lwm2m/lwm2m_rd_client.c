@@ -98,7 +98,7 @@ struct lwm2m_rd_client_info {
 
 	s64_t last_update;
 
-	char ep_name[32];
+	char ep_name[33];
 	char server_ep[32];
 };
 
