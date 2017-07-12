@@ -282,11 +282,30 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 	struct zoap_packet *check_response = (struct zoap_packet *)response;
 	lwm2m_engine_set_data_cb_t callback;
 	bool last_block = false;
+	int rclass, rdetail;
 
 	/* TODO: handle TYPE_RESET */
 	if (zoap_header_get_type(response) == ZOAP_TYPE_ACK) {
 		SYS_LOG_DBG("ACK, separated response");
 		return 0;
+	}
+
+	/* Send back ACK so the server knows we received the pkt */
+	ret = transfer_empty_ack(zoap_header_get_id(check_response));
+	if (ret < 0) {
+		SYS_LOG_ERR("Error transmitting ACK");
+		return ret;
+	}
+
+	/* Check for valid pkts by checking response code */
+	rclass = ZOAP_RESPONSE_CODE_CLASS(zoap_header_get_code(response));
+	rdetail = ZOAP_RESPONSE_CODE_DETAIL(zoap_header_get_code(response));
+	if (rclass != 2) {
+		SYS_LOG_ERR("Invalid response code: %d.%d, download failed",
+				rclass, rdetail);
+		lwm2m_engine_set_u8("5/0/3", STATE_IDLE);
+		lwm2m_engine_set_u8("5/0/5", RESULT_CONNECTION_LOST);
+		return -EINVAL;
 	}
 
 	ret = zoap_update_from_block(check_response, &firmware_block_ctx);
@@ -297,12 +316,6 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 	SYS_LOG_DBG("Block: total: %zd, current: %zd",
 			    firmware_block_ctx.total_size,
 			    firmware_block_ctx.current);
-
-	ret = transfer_empty_ack(zoap_header_get_id(check_response));
-	if (ret < 0) {
-		SYS_LOG_ERR("Error transmitting ACK");
-		return ret;
-	}
 
 	payload = zoap_packet_get_payload(check_response, &payload_len);
 	if (payload_len > 0) {
