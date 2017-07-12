@@ -40,6 +40,13 @@
 #include <net/zoap.h>
 #include <net/lwm2m.h>
 
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+#include CONFIG_MBEDTLS_CFG_FILE
+#include "mbedtls/platform.h"
+#include "mbedtls/net.h"
+#include "mbedtls/ssl.h"
+#endif
+
 #include "lwm2m_object.h"
 #include "lwm2m_engine.h"
 #include "lwm2m_rw_plain_text.h"
@@ -95,6 +102,13 @@ static struct observe_node observe_node_data[CONFIG_LWM2M_ENGINE_MAX_OBSERVER];
 static sys_slist_t engine_obj_list;
 static sys_slist_t engine_obj_inst_list;
 static sys_slist_t engine_observer_list;
+
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+/* TODO: migrate to net_app once DTLS is supported */
+extern mbedtls_ssl_context ssl_ctx;
+#define ZOAP_BUF_SIZE 256
+static u8_t dtls_tx_buf[ZOAP_BUF_SIZE];
+#endif
 
 /* periodic / notify / observe handling stack */
 static K_THREAD_STACK_DEFINE(engine_thread_stack,
@@ -2132,7 +2146,35 @@ static int handle_request(struct zoap_packet *request,
 	return r;
 }
 
-static void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
+int udp_sendto(struct net_pkt *pkt, const struct sockaddr *dst_addr)
+{
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+	int ret, len, hdr_len;
+	len = net_buf_frags_len(pkt->frags);
+	hdr_len = net_pkt_ip_hdr_len(pkt);
+	ret = net_frag_linearize(dtls_tx_buf, ZOAP_BUF_SIZE,
+				 pkt, hdr_len, len);
+	do {
+		ret = mbedtls_ssl_write(&ssl_ctx, dtls_tx_buf, len - hdr_len);
+	} while (ret == MBEDTLS_ERR_SSL_WANT_READ
+		|| ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+
+	SYS_LOG_DBG("finished writing data over ssl_write (%d bytes)", ret);
+	if (ret > 0) {
+		ret = 0;
+	}
+
+	/* Need to unref since mbedtls allocates a new pkt */
+	net_pkt_unref(pkt);
+
+	return ret;
+#else
+	return net_context_sendto(pkt, dst_addr, NET_SOCKADDR_MAX_SIZE,
+				  NULL, K_NO_WAIT, NULL, NULL);
+#endif
+}
+
+void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 			int status, void *user_data)
 {
 	struct zoap_pending *pending;
@@ -2141,10 +2183,11 @@ static void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 	struct sockaddr from_addr;
 	struct zoap_packet response2;
 	struct net_pkt *pkt2;
-	int header_len, r;
+	int r;
 	const u8_t *token;
 	u8_t tkl;
 
+#if !defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
 	/* Save the from address */
 #if defined(CONFIG_NET_IPV6)
 	if (net_pkt_family(pkt) == AF_INET6) {
@@ -2168,8 +2211,23 @@ static void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 	 * zoap expects that buffer->data starts at the
 	 * beginning of the CoAP header
 	 */
+	int header_len;
 	header_len = net_pkt_appdata(pkt) - pkt->frags->data;
 	net_buf_pull(pkt->frags, header_len);
+	SYS_LOG_DBG("zoap header_len: %d", header_len);
+
+#else /* CONFIG_LWM2M_SECURITY_DTLS_SUPPORT */
+
+	/*
+	 * With DTLS from_addr is available via user_data, this is
+	 * to reduce the need for another fragment just to store
+	 * the pkt header, which is needed by zoap
+	 */
+	memcpy(&from_addr, user_data, sizeof(from_addr));
+#endif /* CONFIG_LWM2M_SECURITY_DTLS_SUPPORT */
+
+	SYS_LOG_DBG("checking for reply from [%s]",
+				sprint_ip_addr(&from_addr));
 
 	r = zoap_packet_parse(&response, pkt);
 	if (r < 0) {
@@ -2183,8 +2241,6 @@ static void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 		/* If necessary cancel retransmissions */
 	}
 
-	SYS_LOG_DBG("checking for reply from [%s]",
-		    sprint_ip_addr(&from_addr));
 	reply = zoap_response_received(&response, &from_addr,
 				       replies, NUM_REPLIES);
 	if (!reply) {
@@ -2206,7 +2262,6 @@ static void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 				}
 				goto cleanup;
 			}
-
 			/*
 			 * The "response" here is actually a new request
 			 */
@@ -2214,10 +2269,7 @@ static void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 			if (r < 0) {
 				SYS_LOG_ERR("Request handler error: %d", r);
 			} else {
-				r = net_context_sendto(pkt2, &from_addr,
-						       NET_SOCKADDR_MAX_SIZE,
-						       NULL, K_NO_WAIT, NULL,
-						       NULL);
+				r = udp_sendto(pkt2, &from_addr);
 				if (r < 0) {
 					SYS_LOG_ERR("Err sending response: %d",
 						    r);
@@ -2247,9 +2299,7 @@ static void retransmit_request(struct k_work *work)
 		return;
 	}
 
-	r = net_context_sendto(pending->pkt, &pending->addr,
-			       NET_SOCKADDR_MAX_SIZE,
-			       NULL, K_NO_WAIT, NULL, NULL);
+	r = udp_sendto(pending->pkt, &pending->addr);
 	if (r < 0) {
 		return;
 	}
@@ -2391,8 +2441,7 @@ static int generate_notify_message(struct observe_node *obs,
 		goto cleanup;
 	}
 
-	ret = net_context_sendto(pkt, &obs->addr, NET_SOCKADDR_MAX_SIZE,
-				 NULL, 0, NULL, NULL);
+	ret = udp_sendto(pkt, &obs->addr);
 	if (ret < 0) {
 		SYS_LOG_ERR("Error sending LWM2M packet (err:%d).", ret);
 		goto cleanup;
@@ -2456,12 +2505,15 @@ int lwm2m_engine_start(struct net_context *net_ctx)
 {
 	int ret = 0;
 
+	/* RD client registers its own receive with DTLS */
+#if !defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
 	/* set callback */
 	ret = net_context_recv(net_ctx, udp_receive, 0, NULL);
 	if (ret) {
 		SYS_LOG_ERR("Could not set receive for net context (err:%d)",
 			    ret);
 	}
+#endif
 
 	return ret;
 }

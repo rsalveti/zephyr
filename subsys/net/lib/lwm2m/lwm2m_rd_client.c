@@ -46,9 +46,61 @@
 #include <errno.h>
 #include <init.h>
 #include <misc/printk.h>
+#include <misc/stack.h>
 #include <net/net_pkt.h>
 #include <net/zoap.h>
 #include <net/lwm2m.h>
+
+/* Mbed TLS */
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+/* TODO: Review what is strictly required */
+#include CONFIG_MBEDTLS_CFG_FILE
+#include "mbedtls/platform.h"
+#include "mbedtls/net.h"
+#include "mbedtls/ssl.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+#if defined(MBEDTLS_DEBUG_C)
+#include "mbedtls/debug.h"
+#define DEBUG_THRESHOLD 0
+#endif
+
+#if defined(MBEDTLS_KEY_EXCHANGE__SOME__PSK_ENABLED)
+/* TODO: Retrieve PSK ID and PSK from partition */
+const char psk_id[] = "0970f19b28b24451925523604651de23";
+const unsigned char psk[] = {
+	0xa5, 0x2b, 0xa5, 0x05, 0x05, 0xae, 0x44, 0x15,
+	0x87, 0x7b, 0x7a, 0xd6, 0x81, 0xdf, 0x08, 0x26
+};
+#endif
+
+/* TODO: Use device name if available */
+const char *pers = "perso_data";
+/* TODO: find proper initial and maximum retransmit timeout values */
+#define DTLS_INITIAL_TIMEOUT	5000 /* 5 seconds */
+#define DTLS_MAXIMUM_TIMEOUT	60000 /* 60 seconds */
+
+struct dtls_context {
+	struct net_context *net_ctx;
+	struct net_pkt *rx_pkt;
+	struct k_sem rx_sem;
+	int remaining;
+};
+
+struct dtls_timing_context {
+	u32_t snapshot;
+	u32_t int_ms;
+	u32_t fin_ms;
+};
+
+mbedtls_ssl_context ssl_ctx;
+static struct dtls_context dtls_udp_ctx;
+
+/* TODO: find better way to retrive the size required */
+#define ZOAP_BUF_SIZE 256
+static u8_t dtls_rx_buf[ZOAP_BUF_SIZE];
+
+#endif /* CONFIG_LWM2M_SECURITY_DTLS_SUPPORT */
 
 #include "lwm2m_object.h"
 #include "lwm2m_engine.h"
@@ -69,6 +121,7 @@
  */
 enum sm_engine_state {
 	ENGINE_INIT,
+	ENGINE_SECURITY_HANDSHAKE,
 	ENGINE_DO_BOOTSTRAP,
 	ENGINE_BOOTSTRAP_SENT,
 	ENGINE_BOOTSTRAP_DONE,
@@ -106,6 +159,13 @@ static K_THREAD_STACK_DEFINE(lwm2m_rd_client_thread_stack,
 			     CONFIG_LWM2M_RD_CLIENT_STACK_SIZE);
 struct k_thread lwm2m_rd_client_thread_data;
 
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+/* DTLS RX */
+static K_THREAD_STACK_DEFINE(lwm2m_dtls_read_thread_stack, 3000);
+static struct k_thread lwm2m_dtls_read_thread_data;
+static struct k_sem dtls_read_sem;
+#endif
+
 /* HACK: remove when engine transactions are ready */
 #define NUM_PENDINGS	CONFIG_LWM2M_ENGINE_MAX_PENDING
 #define NUM_REPLIES	CONFIG_LWM2M_ENGINE_MAX_REPLIES
@@ -121,6 +181,241 @@ static u8_t client_data[256]; /* allocate some data for the RD */
 #define CLIENT_INSTANCE_COUNT	CONFIG_LWM2M_RD_CLIENT_INSTANCE_COUNT
 static struct lwm2m_rd_client_info clients[CLIENT_INSTANCE_COUNT];
 static int client_count;
+
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+static void dtls_debug(void *ctx, int level,
+		     const char *file, int line, const char *str)
+{
+	const char *p, *basename;
+
+	/* Extract basename from file */
+	for (p = basename = file; *p != '\0'; p++) {
+		if (*p == '/' || *p == '\\') {
+			basename = p + 1;
+		}
+	}
+
+	mbedtls_printf("%s:%04d: |%d| %s", basename, line, level, str);
+}
+
+void dtls_timing_set_delay(void *data, u32_t int_ms, u32_t fin_ms)
+{
+	struct dtls_timing_context *ctx = (struct dtls_timing_context *)data;
+
+	ctx->int_ms = int_ms;
+	ctx->fin_ms = fin_ms;
+
+	if (fin_ms != 0) {
+		ctx->snapshot = k_uptime_get_32();
+	}
+}
+
+int dtls_timing_get_delay(void *data)
+{
+	struct dtls_timing_context *ctx = (struct dtls_timing_context *)data;
+	unsigned long elapsed_ms;
+
+	if (ctx->fin_ms == 0) {
+		return -1;
+	}
+
+	elapsed_ms = k_uptime_get_32() - ctx->snapshot;
+
+	if (elapsed_ms >= ctx->fin_ms) {
+		return 2;
+	}
+
+	if (elapsed_ms >= ctx->int_ms) {
+		return 1;
+	}
+
+	return 0;
+}
+
+static int entropy_source(void *data, unsigned char *output, size_t len,
+			  size_t *olen)
+{
+	u32_t seed;
+
+	ARG_UNUSED(data);
+
+	seed = sys_rand32_get();
+	if (len > sizeof(seed)) {
+		len = sizeof(seed);
+	}
+
+	memcpy(output, &seed, len);
+
+	*olen = len;
+
+	return 0;
+}
+
+static void dtls_receive(struct net_context *ctx, struct net_pkt *pkt,
+			int status, void *user_data)
+{
+	struct dtls_context *dtls_ctx = user_data;
+
+	ARG_UNUSED(ctx);
+	ARG_UNUSED(status);
+
+	dtls_ctx->rx_pkt = pkt;
+	/* Unblock mbedtls read */
+	k_sem_give(&dtls_ctx->rx_sem);
+}
+
+int dtls_tx(void *context, const unsigned char *buf, size_t size)
+{
+	struct net_context *ctx;
+	struct net_pkt *send_pkt;
+	int ret, len;
+
+	ctx = clients[0].net_ctx;
+	send_pkt = net_pkt_get_tx(ctx, K_FOREVER);
+	if (!send_pkt) {
+		return MBEDTLS_ERR_SSL_ALLOC_FAILED;
+	}
+
+	ret = net_pkt_append_all(send_pkt, size, (u8_t *) buf, K_FOREVER);
+	if (!ret) {
+		return MBEDTLS_ERR_SSL_INTERNAL_ERROR;
+	}
+
+	len = net_pkt_get_len(send_pkt);
+	SYS_LOG_DBG("TX sent to [%s], pkt len: %d",
+			sprint_ip_addr(&clients[0].reg_server), len);
+	/* TODO: context here needs to be the current opened one
+	 * since there can only be one DTLS connection at a time,
+	 * which can be either bootstrap or registration.
+	 * Needs to change to use the internal struct to handle the current
+	 * context being used. */
+	ret = net_context_sendto(send_pkt, &clients[0].reg_server,
+				 NET_SOCKADDR_MAX_SIZE,
+				 NULL, K_FOREVER, NULL, NULL);
+	if (ret < 0) {
+		SYS_LOG_ERR("DTLS TX: ERROR");
+		net_pkt_unref(send_pkt);
+		return MBEDTLS_ERR_SSL_INTERNAL_ERROR;
+	} else {
+		return len;
+	}
+}
+
+int dtls_rx(void *context, unsigned char *buf, size_t size)
+{
+	struct dtls_context *dtls_ctx = context;
+	struct net_buf *rx_buf = NULL;
+	u16_t read_bytes;
+	u8_t *ptr;
+	int pos;
+	int len;
+	int rc;
+
+	k_sem_take(&dtls_ctx->rx_sem, K_FOREVER);
+
+	read_bytes = net_pkt_appdatalen(dtls_ctx->rx_pkt);
+	SYS_LOG_INF("DTLS RX: read_bytes: %d, allocated size: %d", read_bytes, size);
+	if (read_bytes > size) {
+		SYS_LOG_ERR("DTLS RX: alloc failure");
+		return MBEDTLS_ERR_SSL_ALLOC_FAILED;
+	}
+
+	SYS_LOG_INF("RX Source IP: [%s]", sprint_ip_addr(&clients[0].reg_server));
+
+	ptr = net_pkt_appdata(dtls_ctx->rx_pkt);
+	rx_buf = dtls_ctx->rx_pkt->frags;
+	len = rx_buf->len - (ptr - rx_buf->data);
+	pos = 0;
+
+	while (rx_buf) {
+		memcpy(buf + pos, ptr, len);
+		pos += len;
+
+		rx_buf = rx_buf->frags;
+		if (!rx_buf) {
+			break;
+		}
+
+		ptr = rx_buf->data;
+		len = rx_buf->len;
+	}
+
+	net_pkt_unref(dtls_ctx->rx_pkt);
+	dtls_ctx->rx_pkt = NULL;
+
+	if (read_bytes != pos) {
+		return MBEDTLS_ERR_SSL_INTERNAL_ERROR;
+	}
+
+	rc = read_bytes;
+	dtls_ctx->remaining = 0;
+
+	return rc;
+}
+
+static void lwm2m_dtls_read_service(void)
+{
+	struct net_pkt *pkt;
+	struct net_context *net_ctx;
+	int len;
+	int ret = 0;
+
+	while (true) {
+		k_sem_take(&dtls_read_sem, K_FOREVER);
+		SYS_LOG_DBG("dtls read thread unblocked");
+
+	again:
+		net_ctx = clients[0].net_ctx;
+		memset(dtls_rx_buf, 0, ZOAP_BUF_SIZE);
+
+		do {
+			ret = mbedtls_ssl_read(&ssl_ctx,
+					dtls_rx_buf, ZOAP_BUF_SIZE - 1);
+		} while (ret == MBEDTLS_ERR_SSL_WANT_READ ||
+			 ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+
+		if (ret <= 0) {
+			switch (ret) {
+			case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
+				SYS_LOG_INF("Connection closed gracefully");
+				break;
+
+			case MBEDTLS_ERR_NET_CONN_RESET:
+				SYS_LOG_ERR("Connection was reset by peer");
+				break;
+
+			default:
+				SYS_LOG_ERR("SSL read error: %d", ret);
+				break;
+			}
+
+			continue;
+		}
+
+		pkt = net_pkt_get_tx(net_ctx, K_FOREVER);
+		if (!pkt) {
+			SYS_LOG_ERR("Unable to get TX packet, not enough memory.");
+			continue;
+		}
+
+		/* Add dtls buffer to pkt */
+		len = ret;
+		ret = net_pkt_append_all(pkt, len, dtls_rx_buf, K_FOREVER);
+		if (!ret) {
+			SYS_LOG_ERR("Unable to store DATA buffer, not enough memory.");
+			net_pkt_unref(pkt);
+			continue;
+		}
+		net_pkt_set_appdatalen(pkt, len);
+		net_pkt_set_appdata(pkt, pkt->frags->data);
+
+		/* Call back the non DTLS udp_receive function from engine */
+		udp_receive(net_ctx, pkt, 0, &clients[0].reg_server);
+
+		goto again;
+	}
+}
+#endif /* CONFIG_LWM2M_SECURITY_DTLS_SUPPORT */
 
 static void set_sm_state(int index, u8_t state)
 {
@@ -371,6 +666,91 @@ static int sm_do_init(int index)
 	if (clients[index].lifetime == 0) {
 		clients[index].lifetime = CONFIG_LWM2M_ENGINE_DEFAULT_LIFETIME;
 	}
+
+	set_sm_state(index, ENGINE_SECURITY_HANDSHAKE);
+
+	return 0;
+}
+
+static int sm_do_sec_handshake(int index)
+{
+	int ret = 0;
+
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+	SYS_LOG_DBG("Initializing DTLS");
+
+	mbedtls_entropy_context entropy;
+	mbedtls_ctr_drbg_context ctr_drbg;
+	mbedtls_ssl_config conf;
+	struct dtls_timing_context timer;
+
+	mbedtls_ctr_drbg_init(&ctr_drbg);
+	mbedtls_platform_set_printf(printk);
+	mbedtls_ssl_init(&ssl_ctx);
+	mbedtls_ssl_config_init(&conf);
+	mbedtls_entropy_init(&entropy);
+	mbedtls_entropy_add_source(&entropy, entropy_source, NULL,
+				   MBEDTLS_ENTROPY_MAX_GATHER,
+				   MBEDTLS_ENTROPY_SOURCE_STRONG);
+
+	ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
+				    (const unsigned char *)pers, strlen(pers));
+	if (ret != 0) {
+		SYS_LOG_ERR("mbedtls_ctr_drbg_seed failed (-0x%x)", -ret);
+		goto cleanup;
+	}
+
+	ret = mbedtls_ssl_config_defaults(&conf,
+					  MBEDTLS_SSL_IS_CLIENT,
+					  MBEDTLS_SSL_TRANSPORT_DATAGRAM,
+					  MBEDTLS_SSL_PRESET_DEFAULT);
+	if (ret != 0) {
+		SYS_LOG_ERR("mbedtls_ssl_config_defaults"
+				" failed (-0x%x)", -ret);
+		goto cleanup;
+	}
+
+#if defined(MBEDTLS_DEBUG_C)
+	mbedtls_debug_set_threshold(DEBUG_THRESHOLD);
+#endif
+	mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
+	mbedtls_ssl_conf_dbg(&conf, dtls_debug, NULL);
+	ret = mbedtls_ssl_setup(&ssl_ctx, &conf);
+	if (ret != 0) {
+		SYS_LOG_ERR("mbedtls_ssl_setup failed (-0x%x)", -ret);
+		goto cleanup;
+	}
+
+	/* Mbed only allows one set of PSK/PSK_ID */
+#if defined(MBEDTLS_KEY_EXCHANGE__SOME__PSK_ENABLED)
+	ret = mbedtls_ssl_conf_psk(&conf, psk, sizeof(psk),
+				(const unsigned char *) psk_id,
+				sizeof(psk_id) - 1);
+	if (ret != 0) {
+		SYS_LOG_ERR("mbedtls_ssl_conf_psk failed (-0x%x)", -ret);
+		goto cleanup;
+	}
+#endif
+	mbedtls_ssl_conf_handshake_timeout(&conf,
+			DTLS_INITIAL_TIMEOUT, DTLS_MAXIMUM_TIMEOUT);
+	mbedtls_ssl_set_timer_cb(&ssl_ctx, &timer, dtls_timing_set_delay,
+				 dtls_timing_get_delay);
+	mbedtls_ssl_set_bio(&ssl_ctx, &dtls_udp_ctx, dtls_tx, dtls_rx, NULL);
+
+	SYS_LOG_DBG("DTLS starting security handshake");
+	do {
+		ret = mbedtls_ssl_handshake(&ssl_ctx);
+	} while (ret == MBEDTLS_ERR_SSL_WANT_READ ||
+		 ret == MBEDTLS_ERR_SSL_WANT_WRITE);
+	if (ret != 0) {
+		SYS_LOG_ERR("mbedtls_ssl_handshake failed -(0x%x)\n", -ret);
+		goto cleanup;
+	}
+	SYS_LOG_DBG("DTLS handshake completed");
+	k_sem_give(&dtls_read_sem);
+
+#endif /* CONFIG_LWM2M_SECURITY_DTLS_SUPPORT */
+
 	/* Do bootstrap or registration */
 	if (clients[index].use_bootstrap) {
 		set_sm_state(index, ENGINE_DO_BOOTSTRAP);
@@ -379,6 +759,17 @@ static int sm_do_init(int index)
 	}
 
 	return 0;
+
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+cleanup:
+	mbedtls_ssl_free(&ssl_ctx);
+	mbedtls_ssl_config_free(&conf);
+	mbedtls_ctr_drbg_free(&ctr_drbg);
+	mbedtls_entropy_free(&entropy);
+	mbedtls_ssl_close_notify(&ssl_ctx);
+
+	return ret;
+#endif /* CONFIG_LWM2M_SECURITY_DTLS_SUPPORT */
 }
 
 static int sm_do_bootstrap(int index)
@@ -429,9 +820,7 @@ static int sm_do_bootstrap(int index)
 			goto cleanup;
 		}
 
-		ret = net_context_sendto(pkt, &clients[index].bs_server,
-					 NET_SOCKADDR_MAX_SIZE,
-					 NULL, 0, NULL, NULL);
+		ret = udp_sendto(pkt, &clients[index].bs_server);
 		if (ret < 0) {
 			SYS_LOG_ERR("Error sending LWM2M packet (err:%d).",
 				    ret);
@@ -576,9 +965,7 @@ static int sm_send_registration(int index, bool send_obj_support_data,
 	SYS_LOG_DBG("registration sent [%s]",
 		    sprint_ip_addr(&clients[index].reg_server));
 
-	ret = net_context_sendto(pkt, &clients[index].reg_server,
-				 NET_SOCKADDR_MAX_SIZE,
-				 NULL, 0, NULL, NULL);
+	ret = udp_sendto(pkt, &clients[index].reg_server);
 	if (ret < 0) {
 		SYS_LOG_ERR("Error sending LWM2M packet (err:%d).",
 			    ret);
@@ -676,9 +1063,7 @@ static int sm_do_deregister(int index)
 
 	SYS_LOG_INF("Deregister from '%s'", clients[index].server_ep);
 
-	ret = net_context_sendto(pkt, &clients[index].reg_server,
-				 NET_SOCKADDR_MAX_SIZE,
-				 NULL, 0, NULL, NULL);
+	ret = udp_sendto(pkt, &clients[index].reg_server);
 	if (ret < 0) {
 		SYS_LOG_ERR("Error sending LWM2M packet (err:%d).",
 			    ret);
@@ -703,10 +1088,16 @@ static void lwm2m_rd_client_service(void)
 
 	while (true) {
 		for (index = 0; index < client_count; index++) {
+			STACK_ANALYZE("rd_service", lwm2m_rd_client_thread_stack);
+
 			switch (get_sm_state(index)) {
 
 			case ENGINE_INIT:
 				sm_do_init(index);
+				break;
+
+			case ENGINE_SECURITY_HANDSHAKE:
+				sm_do_sec_handshake(index);
 				break;
 
 			case ENGINE_DO_BOOTSTRAP:
@@ -842,6 +1233,7 @@ int lwm2m_rd_client_start(struct net_context *net_ctx,
 			  const char *ep_name)
 {
 	int index;
+	int ret = 0;
 
 	if (client_count + 1 > CLIENT_INSTANCE_COUNT) {
 		return -ENOMEM;
@@ -859,9 +1251,23 @@ int lwm2m_rd_client_start(struct net_context *net_ctx,
 	memcpy(&clients[index].reg_server, peer_addr, sizeof(struct sockaddr));
 	memcpy(&clients[index].bs_server, peer_addr, sizeof(struct sockaddr));
 	set_ep_ports(index);
-	set_sm_state(index, ENGINE_INIT);
 	strncpy(clients[index].ep_name, ep_name,
 		sizeof(clients[index].ep_name)-1);
+
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+	/* TODO: Might need one context per RD connection */
+	k_sem_init(&dtls_udp_ctx.rx_sem, 0, UINT_MAX);
+	dtls_udp_ctx.rx_pkt = NULL;
+	dtls_udp_ctx.remaining = 0;
+	dtls_udp_ctx.net_ctx = net_ctx;
+
+	net_context_recv(net_ctx, dtls_receive, K_NO_WAIT, &dtls_udp_ctx);
+	if (ret) {
+		/* TODO: Abort nicely */
+		SYS_LOG_ERR("Could not set receive for net context (err:%d)", ret);
+	}
+#endif
+
 	SYS_LOG_INF("LWM2M Client: %s", clients[index].ep_name);
 
 	return 0;
@@ -875,6 +1281,17 @@ static int lwm2m_rd_client_init(struct device *dev)
 			(k_thread_entry_t) lwm2m_rd_client_service,
 			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 	SYS_LOG_DBG("LWM2M RD client thread started");
+
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+	k_sem_init(&dtls_read_sem, 0, UINT_MAX);
+	k_thread_create(&lwm2m_dtls_read_thread_data,
+			&lwm2m_dtls_read_thread_stack[0],
+			K_THREAD_STACK_SIZEOF(lwm2m_dtls_read_thread_stack),
+			(k_thread_entry_t) lwm2m_dtls_read_service,
+			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
+	SYS_LOG_DBG("LWM2M DTLS read thread started");
+#endif
+
 	return 0;
 }
 

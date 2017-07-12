@@ -87,6 +87,7 @@ config LWM2M_RD_CLIENT_SUPPORT
 config LWM2M_RD_CLIENT_STACK_SIZE
 	int "LWM2M RD client stack size"
 	default 1024
+	default 3000 if LWM2M_SECURITY_DTLS_SUPPORT
 	help
 	  Set the stack size for the LWM2M RD client
 
@@ -97,17 +98,27 @@ config LWM2M_RD_CLIENT_INSTANCE_COUNT
 	  This setting establishes the total count of LWM2M RD client instances
 	  available.
 
+config LWM2M_SECURITY_DTLS_SUPPORT
+	bool "support for DTLS-based security (CoAPs w/PSK)"
+	depends on MBEDTLS
+	default n
+	help
+	  Support for client connections with DTLS-based security (CoAPs).
+	  Currently only PSK is supported.
+
 config LWM2M_PEER_PORT
 	int "LWM2M server port"
 	depends on LWM2M_RD_CLIENT_SUPPORT
 	default 5683
+	default 5684 if LWM2M_SECURITY_DTLS_SUPPORT
 	help
 	  This is the server port to connect to for LWM2M communication
 
 config LWM2M_BOOTSTRAP_PORT
 	int "LWM2M bootstrap port"
 	depends on LWM2M_RD_CLIENT_SUPPORT
-	default 5684
+	default 5783
+	default 5784 if LWM2M_SECURITY_DTLS_SUPPORT
 	help
 	  This is the bootstrap port to connect to for security configuration
 

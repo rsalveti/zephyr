@@ -75,7 +75,11 @@
 #define MBEDTLS_AES_ROM_TABLES
 
 /* Save some RAM by adjusting to your exact needs */
-#define MBEDTLS_PSK_MAX_LEN    16 /* 128-bits keys are generally enough */
+#if defined(CONFIG_LWM2M_SECURITY_DTLS_SUPPORT)
+#define MBEDTLS_PSK_MAX_LEN    32 /* 256 bits */
+#else
+#define MBEDTLS_PSK_MAX_LEN    16 /* 128 bits */
+#endif
 
 /*
  * You should adjust this to the exact number of sources you're using: default
