@@ -10,6 +10,35 @@ Zephyr applications use the 96b_carbon configuration to run on the 96Boards
 Carbon hardware. It is based on the STMicroelectronics STM32F401RET Cortex-M4
 CPU and also contains a nRF51832 chip connected over SPI for BLE connectivity.
 
+.. note::
+
+   The nRF51832 chip on this board is supported by Zephyr using
+   another configuration, 96b_carbon_nrf51; see
+   :ref:`96b_carbon_nrf51_board` for more details on this
+   configuration.
+
+   **Although both chips exist on the same physical board,
+   96b_carbon_nrf51 is a distinct Zephyr configuration, targeting a
+   different chip, than the 96b_carbon configuration described on this
+   page**.
+
+   This can be confusing. The important things to understand are:
+
+   1. 96b_carbon should be used when developing programs for the main
+      chip on the board, the STM32F401RET. Users will likely want to
+      write applications targeting this chip, using the 96b_carbon
+      configuration, as it is what is connected to all of the breakout
+      I/O headers.
+
+   2. 96b_carbon_nrf51 should be used for the secondary chip, the
+      nRF51832.  Most users will likely not develop applications for
+      this chip, since Zephyr already provides a sample application
+      that can be flashed onto the nRF51832 to provide Bluetooth
+      functionality to the STM32F401RET.
+
+   For instructions on how to set up the nRF51832 to develop Bluetooth
+   applications using 96b_carbon, see :ref:`96b_carbon_nrf51_bluetooth`.
+
 .. figure:: img/96b-carbon-front.png
      :width: 487px
      :align: center
