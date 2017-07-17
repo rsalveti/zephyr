@@ -326,6 +326,10 @@ static int transceive(struct spi_config *config,
 
 	spi_context_release(&data->ctx, ret);
 
+	if (ret) {
+		SYS_LOG_ERR("error mask 0x%x", ret);
+	}
+
 	return ret ? -EIO : 0;
 }
 
