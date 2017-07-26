@@ -42,6 +42,8 @@ static struct zoap_pending pendings[NUM_PENDINGS];
 static struct zoap_reply replies[NUM_REPLIES];
 static struct zoap_block_context firmware_block_ctx;
 
+extern void set_update_state_machine(u8_t state, u8_t result);
+
 static void
 firmware_udp_receive(struct net_context *ctx, struct net_pkt *pkt, int status,
 		     void *user_data)
@@ -143,6 +145,7 @@ static int transfer_request(struct zoap_block_context *ctx,
 
 cleanup:
 	lwm2m_init_message_cleanup(pkt, pending, reply);
+	set_update_state_machine(STATE_IDLE, RESULT_UPDATE_FAILED);
 	return ret;
 }
 
@@ -153,12 +156,11 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 {
 	int ret;
 	size_t transfer_offset = 0;
-	const u8_t *token;
-	u8_t tkl;
 	u16_t payload_len;
 	u8_t *payload;
 	struct zoap_packet *check_response = (struct zoap_packet *)response;
 	lwm2m_engine_set_data_cb_t callback;
+	bool last_block = false;
 
 	SYS_LOG_DBG("TRANSFER REPLY");
 
@@ -167,32 +169,36 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 		SYS_LOG_ERR("Error from block update: %d", ret);
 		return ret;
 	}
+	SYS_LOG_DBG("Block: total: %zd, current: %zd",
+				firmware_block_ctx.total_size,
+				firmware_block_ctx.current);
 
-	/* TODO: Process incoming data */
 	payload = zoap_packet_get_payload(check_response, &payload_len);
 	if (payload_len > 0) {
-		/* TODO: Determine when to actually advance to next block */
 		transfer_offset = zoap_next_block(response,
 						  &firmware_block_ctx);
+		last_block = transfer_offset == 0;
+		SYS_LOG_DBG("pkt payload len %d, last block: %d",
+					payload_len, last_block);
 
-		SYS_LOG_DBG("total: %zd, current: %zd",
-			    firmware_block_ctx.total_size,
-			    firmware_block_ctx.current);
-
-		/* callback */
+		/* application callback */
 		callback = lwm2m_firmware_get_write_cb();
 		if (callback) {
-			callback(0, payload, payload_len,
-				transfer_offset == 0,
-				firmware_block_ctx.total_size);
+			/* TODO: define return values and set state machine */
+			ret = callback(0, payload, payload_len, last_block,
+					firmware_block_ctx.total_size);
+			if (ret < 0) {
+				SYS_LOG_ERR("Callback failure (%d)", ret);
+				return ret;
+			}
 		}
 	}
 
-	/* TODO: Determine actual completion criteria */
-	if (transfer_offset > 0) {
-		token = zoap_header_get_token(check_response, &tkl);
-		ret = transfer_request(&firmware_block_ctx, token, tkl,
-				       do_firmware_transfer_reply_cb);
+	if (last_block) {
+		set_update_state_machine(STATE_DOWNLOADED, RESULT_DEFAULT);
+	} else {
+		ret = transfer_request(&firmware_block_ctx, zoap_next_token(),
+				8, do_firmware_transfer_reply_cb);
 	}
 
 	return ret;
@@ -303,6 +309,7 @@ static void firmware_transfer(struct k_work *work)
 	/* reset block transfer context */
 	zoap_block_transfer_init(&firmware_block_ctx, default_block_size(), 0);
 
+	set_update_state_machine(STATE_DOWNLOADING, RESULT_DEFAULT);
 	transfer_request(&firmware_block_ctx, NULL, 0,
 			 do_firmware_transfer_reply_cb);
 	return;
@@ -311,6 +318,7 @@ cleanup:
 	if (firmware_net_ctx) {
 		net_context_put(firmware_net_ctx);
 	}
+	set_update_state_machine(STATE_IDLE, RESULT_UPDATE_FAILED);
 }
 
 /* TODO: */
