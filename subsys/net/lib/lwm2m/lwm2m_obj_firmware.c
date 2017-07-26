@@ -64,6 +64,14 @@ static lwm2m_engine_set_data_cb_t write_cb;
 extern int lwm2m_firmware_start_transfer(char *package_uri);
 #endif
 
+/* Placeholder, application needs to overwrite the callback */
+static int firmware_update_cb(u16_t obj_inst_id)
+{
+	SYS_LOG_ERR("Firmware Update execute callback not implemented");
+
+	return -EPERM;
+}
+
 static int package_write_cb(u16_t obj_inst_id,
 			    u8_t *data, u16_t data_len,
 			    bool last_block, size_t total_size)
@@ -109,7 +117,8 @@ static struct lwm2m_engine_obj_inst *firmware_create(u16_t obj_inst_id)
 	INIT_OBJ_RES(res, i, FIRMWARE_PACKAGE_URI_ID, 0,
 		     package_uri, PACKAGE_URI_LEN,
 		     NULL, NULL, package_uri_write_cb, NULL);
-	INIT_OBJ_RES_DUMMY(res, i, FIRMWARE_UPDATE_ID);
+	INIT_OBJ_RES_EXECUTE(res, i, FIRMWARE_UPDATE_ID,
+			     firmware_update_cb);
 	INIT_OBJ_RES_DATA(res, i, FIRMWARE_STATE_ID,
 			  &update_state, sizeof(update_state));
 	INIT_OBJ_RES_DATA(res, i, FIRMWARE_UPDATE_RESULT_ID,
