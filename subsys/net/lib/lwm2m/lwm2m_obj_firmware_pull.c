@@ -92,6 +92,16 @@ static int transfer_request(struct zoap_block_context *ctx,
 		goto cleanup;
 	}
 
+#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_SUPPORT)
+	char *uri_path =
+		CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_URI_PATH;
+	ret = zoap_add_option(&request, ZOAP_OPTION_URI_PATH,
+			uri_path, strlen(uri_path));
+	if (ret < 0) {
+		SYS_LOG_ERR("Error adding URI_PATH '%s'", uri_path);
+		goto cleanup;
+	}
+#else
 	/* hard code URI path here -- should be pulled from package_uri */
 	ret = zoap_add_option(&request, ZOAP_OPTION_URI_PATH,
 			"large-create", sizeof("large-create") - 1);
@@ -101,12 +111,20 @@ static int transfer_request(struct zoap_block_context *ctx,
 		SYS_LOG_ERR("Error adding URI_QUERY 'large'");
 		goto cleanup;
 	}
-
+#endif
 	ret = zoap_add_block2_option(&request, ctx);
 	if (ret) {
 		SYS_LOG_ERR("Unable to add block2 option.");
 		goto cleanup;
 	}
+#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_SUPPORT)
+	ret = zoap_add_option(&request, ZOAP_OPTION_PROXY_URI,
+			firmware_uri, strlen(firmware_uri));
+	if (ret < 0) {
+		SYS_LOG_ERR("Error adding PROXY_URI '%s'", firmware_uri);
+		goto cleanup;
+	}
+#endif
 
 	pending = lwm2m_init_message_pending(&request, &firmware_addr,
 					     pendings, NUM_PENDINGS);
@@ -146,6 +164,32 @@ cleanup:
 	return ret;
 }
 
+static int transfer_empty_ack(u16_t mid)
+{
+	struct zoap_packet request;
+	struct net_pkt *pkt = NULL;
+	int ret;
+
+	ret = lwm2m_init_message(firmware_net_ctx, &request, &pkt,
+			ZOAP_TYPE_ACK, ZOAP_CODE_EMPTY, mid, NULL, 0);
+	if (ret) {
+		goto cleanup;
+	}
+
+	ret = lwm2m_udp_sendto(pkt, &firmware_addr);
+	if (ret < 0) {
+		SYS_LOG_ERR("Error sending LWM2M packet (err:%d).",
+			    ret);
+		goto cleanup;
+	}
+
+	return 0;
+
+cleanup:
+	lwm2m_init_message_cleanup(pkt, NULL, NULL);
+	return ret;
+}
+
 static int
 do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 			      struct zoap_reply *reply,
@@ -158,8 +202,29 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 	struct zoap_packet *check_response = (struct zoap_packet *)response;
 	lwm2m_engine_set_data_cb_t callback;
 	bool last_block = false;
+	int rclass, rdetail;
 
-	SYS_LOG_DBG("TRANSFER REPLY");
+	/* If separated response (ACK) return and wait for response */
+	if (zoap_header_get_type(response) == ZOAP_TYPE_ACK) {
+		return 0;
+	}
+
+	/* Send back ACK so the server knows we received the pkt */
+	ret = transfer_empty_ack(zoap_header_get_id(check_response));
+	if (ret < 0) {
+		SYS_LOG_ERR("Error transmitting ACK");
+		return ret;
+	}
+
+	/* Check for valid pkts by checking response code */
+	rclass = ZOAP_RESPONSE_CODE_CLASS(zoap_header_get_code(response));
+	rdetail = ZOAP_RESPONSE_CODE_DETAIL(zoap_header_get_code(response));
+	if (rclass != 2) {
+		SYS_LOG_ERR("Invalid response code: %d.%d, download failed",
+				rclass, rdetail);
+		set_update_state_machine(STATE_IDLE, RESULT_CONNECTION_LOST);
+		return -EINVAL;
+	}
 
 	ret = zoap_update_from_block(check_response, &firmware_block_ctx);
 	if (ret < 0) {
@@ -234,30 +299,42 @@ static void firmware_transfer(struct k_work *work)
 					       .sin_family = AF_INET };
 #endif
 	struct net_if *iface;
+	char *server_addr;
 	int ret, port, family;
 
 	/* Server Peer IP information */
-	/* TODO: use parser on firmware_uri to determine IP version + port */
-	/* TODO: hard code IPv4 + port for now */
+	/* TODO: use parser on server addr (with and without proxy) */
+#if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_SUPPORT)
+	server_addr = CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_ADDR;
+	port = CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_PORT;
+#else
+	/* HACK: use firmware_uri directly as IP address */
+	server_addr = firmware_uri;
+	/* TODO: hard code port for now */
 	port = 5685;
+#endif
+#if defined(CONFIG_NET_IPV6)
+	family = AF_INET6;
+#endif
+#if defined(CONFIG_NET_IPV4)
 	family = AF_INET;
+#endif
 
 #if defined(CONFIG_NET_IPV6)
 	if (family == AF_INET6) {
 		firmware_addr.sa_family = family;
-		/* HACK: use firmware_uri directly as IP address */
-		net_addr_pton(firmware_addr.sa_family, firmware_uri,
+		net_addr_pton(firmware_addr.sa_family, server_addr,
 			      &net_sin6(&firmware_addr)->sin6_addr);
-		net_sin6(&firmware_addr)->sin6_port = htons(5685);
+		net_sin6(&firmware_addr)->sin6_port = htons(port);
 	}
 #endif
 
 #if defined(CONFIG_NET_IPV4)
 	if (family == AF_INET) {
 		firmware_addr.sa_family = family;
-		net_addr_pton(firmware_addr.sa_family, firmware_uri,
+		net_addr_pton(firmware_addr.sa_family, server_addr,
 			      &net_sin(&firmware_addr)->sin_addr);
-		net_sin(&firmware_addr)->sin_port = htons(5685);
+		net_sin(&firmware_addr)->sin_port = htons(port);
 	}
 #endif
 
@@ -295,7 +372,7 @@ static void firmware_transfer(struct k_work *work)
 		goto cleanup;
 	}
 
-	SYS_LOG_DBG("Attached to port: %d", port);
+	SYS_LOG_DBG("Attached to server %s, port %d", server_addr, port);
 	ret = net_context_recv(firmware_net_ctx, firmware_udp_receive, 0, NULL);
 	if (ret) {
 		SYS_LOG_ERR("Could not set receive for net context (err:%d)",
@@ -307,7 +384,7 @@ static void firmware_transfer(struct k_work *work)
 	zoap_block_transfer_init(&firmware_block_ctx, default_block_size(), 0);
 
 	set_update_state_machine(STATE_DOWNLOADING, RESULT_DEFAULT);
-	transfer_request(&firmware_block_ctx, NULL, 0,
+	transfer_request(&firmware_block_ctx, zoap_next_token(), 8,
 			 do_firmware_transfer_reply_cb);
 	return;
 
