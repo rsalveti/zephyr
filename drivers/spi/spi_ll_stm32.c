@@ -33,6 +33,10 @@
 			   LL_SPI_SR_OVR | LL_SPI_SR_FRE)
 #endif
 
+#ifdef CONFIG_SPI_STM32_INTERRUPT
+static void spi_stm32_transmit(SPI_TypeDef *spi, struct spi_stm32_data *data);
+static void spi_stm32_receive(SPI_TypeDef *spi, struct spi_stm32_data *data);
+
 static int spi_stm32_get_err(SPI_TypeDef *spi)
 {
 	u32_t sr = LL_SPI_ReadReg(spi, SR);
@@ -42,11 +46,9 @@ static int spi_stm32_get_err(SPI_TypeDef *spi)
 static void spi_stm32_complete(struct spi_stm32_data *data, SPI_TypeDef *spi,
 			       int status)
 {
-#ifdef CONFIG_SPI_STM32_INTERRUPT
 	LL_SPI_DisableIT_TXE(spi);
 	LL_SPI_DisableIT_RXNE(spi);
 	LL_SPI_DisableIT_ERR(spi);
-#endif
 
 	spi_context_cs_control(&data->ctx, false);
 
@@ -64,14 +66,8 @@ static void spi_stm32_complete(struct spi_stm32_data *data, SPI_TypeDef *spi,
 		LL_SPI_Disable(spi);
 	}
 
-#ifdef CONFIG_SPI_STM32_INTERRUPT
 	spi_context_complete(&data->ctx, status);
-#endif
 }
-
-#ifdef CONFIG_SPI_STM32_INTERRUPT
-static void spi_stm32_transmit(SPI_TypeDef *spi, struct spi_stm32_data *data);
-static void spi_stm32_receive(SPI_TypeDef *spi, struct spi_stm32_data *data);
 
 static void spi_stm32_isr(void *arg)
 {
@@ -291,7 +287,6 @@ static int transceive(struct spi_config *config,
 
 	LL_SPI_Enable(spi);
 
-	/* This is turned off in spi_stm32_complete(). */
 	spi_context_cs_control(&data->ctx, true);
 
 #ifdef CONFIG_SPI_STM32_INTERRUPT
@@ -321,7 +316,21 @@ static int transceive(struct spi_config *config,
 	} while (spi_context_tx_on(&data->ctx) ||
 		 spi_context_rx_on(&data->ctx));
 
-	spi_stm32_complete(data, spi, ret);
+	spi_context_cs_control(&data->ctx, false);
+
+#if defined(CONFIG_SOC_SERIES_STM32L4X) || defined(CONFIG_SOC_SERIES_STM32F3X)
+	/* Flush RX buffer */
+	while (LL_SPI_IsActiveFlag_RXNE(spi)) {
+		(void) LL_SPI_ReceiveData8(spi);
+	}
+#endif
+
+	if (LL_SPI_GetMode(spi) == LL_SPI_MODE_MASTER) {
+		while (LL_SPI_IsActiveFlag_BSY(spi)) {
+			/* NOP */
+		}
+		LL_SPI_Disable(spi);
+	}
 #endif
 
 	spi_context_release(&data->ctx, 0);
