@@ -41,9 +41,7 @@ extern "C" {
  * @brief SPI operational mode
  */
 #define SPI_OP_MODE_MASTER	0
-#define SPI_OP_MODE_SLAVE	BIT(0)
-#define SPI_OP_MODE_MASK	0x1
-#define SPI_OP_MODE_GET(_operation_) ((_operation_) & SPI_OP_MODE_MASK)
+#define SPI_OP_MODE_SLAVE	1
 
 /**
  * @brief SPI Polarity & Phase Modes
