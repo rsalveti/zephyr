@@ -10,7 +10,6 @@
 #include <zephyr.h>
 #include <misc/printk.h>
 #include <string.h>
-#include <stdio.h>
 
 #include <spi.h>
 
@@ -84,22 +83,6 @@ struct spi_cs_control spi_cs = {
 u8_t buffer_tx[] = "0123456789abcdef\0";
 u8_t buffer_rx[BUF_SIZE] = {};
 
-/*
- * We need 5x(buffer size) + 1 to print a comma-separated list of each
- * byte in hex, plus a null.
- */
-u8_t buffer_print_tx[BUF_SIZE * 5 + 1];
-u8_t buffer_print_rx[BUF_SIZE * 5 + 1];
-
-static void to_display_format(const u8_t *src, size_t size, char *dst)
-{
-	size_t i;
-
-	for (i = 0; i < size; i++) {
-		sprintf(dst + 5 * i, "0x%02x,", src[i]);
-	}
-}
-
 struct spi_config spi_slow = {
 #if defined(MIN_FREQ)
 	.frequency = MIN_FREQ,
@@ -160,12 +143,8 @@ static int spi_complete_loop(struct spi_config *spi_conf)
 	}
 
 	if (memcmp(buffer_tx, buffer_rx, BUF_SIZE)) {
-		to_display_format(buffer_tx, BUF_SIZE, buffer_print_tx);
-		to_display_format(buffer_rx, BUF_SIZE, buffer_print_rx);
-		SYS_LOG_ERR("Buffer contents are different: %s",
-			    buffer_print_tx);
-		SYS_LOG_ERR("                           vs: %s",
-			    buffer_print_rx);
+		SYS_LOG_ERR("Buffer contents are different %s vs %s",
+			    buffer_tx, buffer_rx);
 		return -1;
 	}
 
@@ -202,12 +181,7 @@ static int spi_rx_half_start(struct spi_config *spi_conf)
 	}
 
 	if (memcmp(buffer_tx, buffer_rx, 8)) {
-		to_display_format(buffer_tx, 8, buffer_print_tx);
-		to_display_format(buffer_rx, 8, buffer_print_rx);
-		SYS_LOG_ERR("Buffer contents are different: %s",
-			    buffer_print_tx);
-		SYS_LOG_ERR("                           vs: %s",
-			    buffer_print_rx);
+		SYS_LOG_ERR("Buffer contents are different");
 		return -1;
 	}
 
@@ -248,12 +222,7 @@ static int spi_rx_half_end(struct spi_config *spi_conf)
 	}
 
 	if (memcmp(buffer_tx+8, buffer_rx, 8)) {
-		to_display_format(buffer_tx + 8, 8, buffer_print_tx);
-		to_display_format(buffer_rx, 8, buffer_print_rx);
-		SYS_LOG_ERR("Buffer contents are different: %s",
-			    buffer_print_tx);
-		SYS_LOG_ERR("                           vs: %s",
-			    buffer_print_rx);
+		SYS_LOG_ERR("Buffer contents are different");
 		return -1;
 	}
 
@@ -301,21 +270,9 @@ static int spi_rx_every_4(struct spi_config *spi_conf)
 		return -1;
 	}
 
-	if (memcmp(buffer_tx + 4, buffer_rx, 4)) {
-		to_display_format(buffer_tx + 4, 4, buffer_print_tx);
-		to_display_format(buffer_rx, 4, buffer_print_rx);
-		SYS_LOG_ERR("Buffer contents are different: %s",
-			    buffer_print_tx);
-		SYS_LOG_ERR("                           vs: %s",
-			    buffer_print_rx);
-		return -1;
-	} else if (memcmp(buffer_tx + 12, buffer_rx + 4, 4)) {
-		to_display_format(buffer_tx + 12, 4, buffer_print_tx);
-		to_display_format(buffer_rx + 4, 4, buffer_print_rx);
-		SYS_LOG_ERR("Buffer contents are different: %s",
-			    buffer_print_tx);
-		SYS_LOG_ERR("                           vs: %s",
-			    buffer_print_rx);
+	if (memcmp(buffer_tx + 4, buffer_rx, 4) ||
+	    memcmp(buffer_tx + 12, buffer_rx + 4, 4)) {
+		SYS_LOG_ERR("Buffer contents are different");
 		return -1;
 	}
 
