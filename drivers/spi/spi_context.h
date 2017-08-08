@@ -34,9 +34,9 @@ struct spi_context {
 	struct spi_buf *current_rx;
 	size_t rx_count;
 
-	u8_t *tx_buf;
+	void *tx_buf;
 	size_t tx_len;
-	u8_t *rx_buf;
+	void *rx_buf;
 	size_t rx_len;
 };
 
