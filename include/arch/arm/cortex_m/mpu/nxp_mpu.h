@@ -62,21 +62,6 @@
 #define ENDADDR_ROUND(x) (x - 0x1F)
 
 /* Some helper defines for common regions */
-#if defined(CONFIG_MPU_ALLOW_FLASH_WRITE)
-/*
- * This config option enables the possibility to write in flash and to execute
- * from RAM since it is required to initialize the flash driver.
- */
-#define REGION_RAM_ATTR	  (MPU_REGION_READ | \
-			   MPU_REGION_WRITE | \
-			   MPU_REGION_EXEC | \
-			   MPU_REGION_SU)
-
-#define REGION_FLASH_ATTR (MPU_REGION_READ | \
-			   MPU_REGION_WRITE | \
-			   MPU_REGION_EXEC | \
-			   MPU_REGION_SU)
-#else
 #define REGION_RAM_ATTR	  (MPU_REGION_READ | \
 			   MPU_REGION_WRITE | \
 			   MPU_REGION_SU)
@@ -84,7 +69,6 @@
 #define REGION_FLASH_ATTR (MPU_REGION_READ | \
 			   MPU_REGION_EXEC | \
 			   MPU_REGION_SU)
-#endif
 
 #define REGION_IO_ATTR	  (MPU_REGION_READ | \
 			   MPU_REGION_WRITE | \
