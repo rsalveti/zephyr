@@ -303,6 +303,7 @@ static int transceive(struct spi_config *config,
 
 	ret = spi_context_wait_for_completion(&data->ctx);
 #else
+	ret = 0;		/* FIXME: add error checking. */
 	do {
 		/* Keep transmitting NOP data until RX data left */
 		if ((spi_context_tx_on(&data->ctx) ||
@@ -315,16 +316,13 @@ static int transceive(struct spi_config *config,
 		    LL_SPI_IsActiveFlag_RXNE(spi)) {
 			spi_stm32_receive(spi, data);
 		}
-
-		ret = spi_stm32_get_err(spi);
-	} while (!ret &&
-		 (spi_context_tx_on(&data->ctx) ||
-		  spi_context_rx_on(&data->ctx)));
+	} while (spi_context_tx_on(&data->ctx) ||
+		 spi_context_rx_on(&data->ctx));
 
 	spi_stm32_complete(data, spi, ret);
 #endif
 
-	spi_context_release(&data->ctx, ret);
+	spi_context_release(&data->ctx, 0);
 
 	return ret ? -EIO : 0;
 }
