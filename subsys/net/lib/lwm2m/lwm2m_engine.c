@@ -2145,12 +2145,6 @@ static int handle_request(struct zoap_packet *request,
 	return r;
 }
 
-int lwm2m_udp_sendto(struct net_pkt *pkt, const struct sockaddr *dst_addr)
-{
-	return net_context_sendto(pkt, dst_addr, NET_SOCKADDR_MAX_SIZE,
-				  NULL, K_NO_WAIT, NULL, NULL);
-}
-
 void lwm2m_udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 		       struct zoap_pending *zpendings, int num_zpendings,
 		       struct zoap_reply *zreplies, int num_zreplies,
@@ -2246,7 +2240,10 @@ void lwm2m_udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 			if (r < 0) {
 				SYS_LOG_ERR("Request handler error: %d", r);
 			} else {
-				r = lwm2m_udp_sendto(pkt2, &from_addr);
+				r = net_context_sendto(pkt2, &from_addr,
+						       NET_SOCKADDR_MAX_SIZE,
+						       NULL, K_NO_WAIT, NULL,
+						       NULL);
 				if (r < 0) {
 					SYS_LOG_ERR("Err sending response: %d",
 						    r);
@@ -2283,7 +2280,9 @@ static void retransmit_request(struct k_work *work)
 		return;
 	}
 
-	r = lwm2m_udp_sendto(pending->pkt, &pending->addr);
+	r = net_context_sendto(pending->pkt, &pending->addr,
+			       NET_SOCKADDR_MAX_SIZE,
+			       NULL, K_NO_WAIT, NULL, NULL);
 	if (r < 0) {
 		return;
 	}
@@ -2428,7 +2427,8 @@ static int generate_notify_message(struct observe_node *obs,
 	zoap_reply_init(reply, &request);
 	reply->reply = notify_message_reply_cb;
 
-	ret = lwm2m_udp_sendto(pkt, &obs->addr);
+	ret = net_context_sendto(pkt, &obs->addr, NET_SOCKADDR_MAX_SIZE,
+				 NULL, 0, NULL, NULL);
 	if (ret < 0) {
 		SYS_LOG_ERR("Error sending LWM2M packet (err:%d).", ret);
 		goto cleanup;
