@@ -1,10 +1,4 @@
 /*
- * Copyright (c) 2017 Linaro Limited
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
-/*
  * Copyright (c) 2016, Eistec AB.
  * All rights reserved.
  *
