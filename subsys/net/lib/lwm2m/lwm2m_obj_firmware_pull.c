@@ -49,7 +49,7 @@ firmware_udp_receive(struct net_context *ctx, struct net_pkt *pkt, int status,
 		     void *user_data)
 {
 	lwm2m_udp_receive(ctx, pkt, pendings, NUM_PENDINGS,
-			  replies, NUM_REPLIES, true, NULL);
+			  replies, NUM_REPLIES, NULL);
 }
 
 static void retransmit_request(struct k_work *work)
