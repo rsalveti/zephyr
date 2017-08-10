@@ -91,6 +91,22 @@ config NET_APP_TLS
 	help
 	Enables net app library to use TLS for encrypted communication.
 
+config NET_APP_DTLS
+	bool "Enable DTLS support for UDP applications"
+	depends on NET_UDP
+	depends on NET_APP_TLS
+	default n
+	help
+	Enables net app library to use TLS for encrypted UDP communication.
+
+config NET_APP_DTLS_TIMEOUT
+	int "DTLS session timeout"
+	depends on NET_APP_DTLS
+	default 15
+	help
+	If a DTLS session does not have any activity, then disconnect
+	the session. The value is in seconds.
+
 config NET_DEBUG_APP_TLS_LEVEL
 	int "Debug level for mbedtls in net app library"
 	depends on NET_APP_TLS && NET_DEBUG_APP
@@ -219,5 +235,17 @@ config NET_APP_IEEE802154_SECURITY_LEVEL
 	  7 encryption/authentication with a 16 bytes length tag
 
 endif # NET_L2_IEEE802154 || NET_L2_RAW_CHANNEL
+
+if NET_L2_BLUETOOTH
+
+config NET_APP_BLUETOOTH_NODE
+	bool "Enable Bluetooth node support"
+	default n
+	select NET_L2_BLUETOOTH_MGMT
+	help
+	Enables application to operate in node mode which requires GATT
+	service to be registered and start advertising as peripheral.
+
+endif # NET_L2_BLUETOOTH
 
 endif # NET_APP_SETTINGS

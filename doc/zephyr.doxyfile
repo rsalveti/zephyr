@@ -107,7 +107,6 @@ INPUT                  = \
 			../include/arch/arm/cortex_m \
                         ../include/arch/nios2/ \
                         ../lib/libc/minimal/include/ \
-                        ../ext/lib/crypto/tinycrypt/include/ \
                         ../include/net/zoap.h \
                         ../include/net/dns_resolve.h \
                         ../tests/ztest/include/
@@ -148,7 +147,7 @@ IGNORE_PREFIX          =
 #---------------------------------------------------------------------------
 # Configuration options related to the HTML output
 #---------------------------------------------------------------------------
-GENERATE_HTML          = NO
+GENERATE_HTML          = YES
 HTML_OUTPUT            = html
 HTML_FILE_EXTENSION    = .html
 HTML_HEADER            =

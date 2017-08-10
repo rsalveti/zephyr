@@ -86,7 +86,7 @@ static size_t health_get_current(struct bt_mesh_model *mod,
 
 	bt_mesh_model_msg_init(msg, OP_HEALTH_CURRENT_STATUS);
 
-	test_id = net_buf_simple_add(msg, sizeof(test_id));
+	test_id = net_buf_simple_add(msg, 1);
 	company_ptr = net_buf_simple_add(msg, sizeof(company_id));
 
 	fault_count = net_buf_simple_tailroom(msg) - 4;
@@ -326,7 +326,7 @@ static void health_period_set(struct bt_mesh_model *model,
 	send_health_period_status(model, ctx);
 }
 
-const struct bt_mesh_model_op const bt_mesh_health_op[] = {
+const struct bt_mesh_model_op bt_mesh_health_op[] = {
 	{ OP_HEALTH_FAULT_GET,         2,   health_fault_get },
 	{ OP_HEALTH_FAULT_CLEAR,       2,   health_fault_clear },
 	{ OP_HEALTH_FAULT_CLEAR_UNREL, 2,   health_fault_clear_unrel },

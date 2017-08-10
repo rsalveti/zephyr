@@ -563,6 +563,8 @@ static int tcp_connect(struct http_client_ctx *ctx)
 		return ret;
 	}
 
+	net_context_setup_pools(ctx->tcp.ctx, ctx->tx_slab, ctx->data_pool);
+
 	ret = net_context_bind(ctx->tcp.ctx, &ctx->tcp.local,
 			       addrlen);
 	if (ret) {
@@ -1633,7 +1635,7 @@ int https_client_init(struct http_client_ctx *ctx,
 		      const char *cert_host,
 		      https_entropy_src_cb_t entropy_src_cb,
 		      struct k_mem_pool *pool,
-		      u8_t *https_stack,
+		      k_thread_stack_t https_stack,
 		      size_t https_stack_size)
 {
 	int ret;
@@ -1732,3 +1734,15 @@ void http_client_release(struct http_client_ctx *ctx)
 	 */
 	memset(ctx, 0, sizeof(*ctx));
 }
+
+#if defined(CONFIG_NET_CONTEXT_NET_PKT_POOL)
+int http_client_set_net_pkt_pool(struct http_client_ctx *ctx,
+				 net_pkt_get_slab_func_t tx_slab,
+				 net_pkt_get_pool_func_t data_pool)
+{
+	ctx->tx_slab = tx_slab;
+	ctx->data_pool = data_pool;
+
+	return 0;
+}
+#endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */

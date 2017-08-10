@@ -270,6 +270,48 @@ int http_response_404(struct http_server_ctx *ctx, const char *html_payload)
 	return http_response(ctx, HTTP_STATUS_404_NF, html_payload);
 }
 
+int http_response_send_data(struct http_server_ctx *ctx,
+			    const char *http_header,
+			    const char *html_payload,
+			    s32_t timeout)
+{
+	struct net_pkt *pkt;
+	int ret = -EINVAL;
+
+	pkt = net_pkt_get_tx(ctx->req.net_ctx, ctx->timeout);
+	if (!pkt) {
+		return ret;
+	}
+
+	if (http_header) {
+		ret = http_add_header(pkt, ctx->timeout, http_header);
+		if (ret != 0) {
+			goto exit_routine;
+		}
+	}
+
+	ret = http_add_chunk(pkt, ctx->timeout, html_payload);
+	if (ret != 0) {
+		goto exit_routine;
+	}
+
+	net_pkt_set_appdatalen(pkt, net_buf_frags_len(pkt->frags));
+
+	ret = ctx->send_data(pkt, pkt_sent, 0, INT_TO_POINTER(timeout), ctx);
+	if (ret != 0) {
+		goto exit_routine;
+	}
+
+	pkt = NULL;
+
+exit_routine:
+	if (pkt) {
+		net_pkt_unref(pkt);
+	}
+
+	return ret;
+}
+
 int http_server_set_local_addr(struct sockaddr *addr, const char *myaddr,
 			       u16_t port)
 {
@@ -804,6 +846,9 @@ static int setup_ipv4_ctx(struct http_server_ctx *http_ctx,
 		return ret;
 	}
 
+	net_context_setup_pools(http_ctx->net_ipv4_ctx, http_ctx->tx_slab,
+				http_ctx->data_pool);
+
 	if (addr->family == AF_UNSPEC) {
 		addr->family = AF_INET;
 
@@ -837,6 +882,9 @@ int setup_ipv6_ctx(struct http_server_ctx *http_ctx, struct sockaddr *addr)
 		http_ctx->net_ipv6_ctx = NULL;
 		return ret;
 	}
+
+	net_context_setup_pools(http_ctx->net_ipv6_ctx, http_ctx->tx_slab,
+				http_ctx->data_pool);
 
 	if (addr->family == AF_UNSPEC) {
 		addr->family = AF_INET6;
@@ -1569,7 +1617,7 @@ int https_server_init(struct http_server_ctx *ctx,
 		      https_server_cert_cb_t cert_cb,
 		      https_entropy_src_cb_t entropy_src_cb,
 		      struct k_mem_pool *pool,
-		      u8_t *https_stack,
+		      k_thread_stack_t https_stack,
 		      size_t https_stack_size)
 {
 	int ret;
@@ -1627,3 +1675,15 @@ int https_server_init(struct http_server_ctx *ctx,
 	return https_init(ctx);
 }
 #endif /* CONFIG_HTTPS */
+
+#if defined(CONFIG_NET_CONTEXT_NET_PKT_POOL)
+int http_server_set_net_pkt_pool(struct http_server_ctx *ctx,
+				 net_pkt_get_slab_func_t tx_slab,
+				 net_pkt_get_pool_func_t data_pool)
+{
+	ctx->tx_slab = tx_slab;
+	ctx->data_pool = data_pool;
+
+	return 0;
+}
+#endif /* CONFIG_NET_CONTEXT_NET_PKT_POOL */

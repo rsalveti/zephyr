@@ -22,6 +22,12 @@ Zephyr Project Documentation
 
    `Zephyr 1.5.0`_ | `Zephyr 1.6.0`_ | `Zephyr 1.7.0`_ | `Zephyr 1.8.0`_
 
+Source code for the Zephyr Project is maintained in the
+`Zephyr Project GitHub repository`_.
+
+.. _Zephyr Project GitHub repository:
+   https://github.com/zephyrproject-rtos/zephyr
+
 Sections
 ********
 
@@ -40,7 +46,7 @@ Sections
    api/api.rst
    samples/samples.rst
    reference/kconfig/index.rst
-   contribute/code.rst
+   contribute/contribute.rst
    release-notes.rst
    LICENSING.rst
    glossary.rst

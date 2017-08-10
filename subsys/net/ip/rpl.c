@@ -927,6 +927,11 @@ static void rpl_probing_timer(struct k_work *work)
 		struct in6_addr *dst;
 		int ret;
 
+		if (!nbr) {
+			NET_DBG("No such parent neighbor %p", probing_target);
+			return;
+		}
+
 		dst = net_ipv6_nbr_lookup_by_index(instance->iface, nbr->idx);
 
 		lladdr = net_nbr_get_lladdr(nbr->idx);
@@ -2437,7 +2442,7 @@ static void net_rpl_add_dag(struct net_if *iface,
 {
 	struct net_rpl_instance *instance;
 	struct net_rpl_dag *dag, *previous_dag;
-	struct net_rpl_parent *parent;
+	struct net_rpl_parent *parent = NULL;
 
 	dag = alloc_dag(dio->instance_id, &dio->dag_id);
 	if (!dag) {
@@ -2465,6 +2470,11 @@ static void net_rpl_add_dag(struct net_if *iface,
 		if (parent) {
 			net_rpl_move_parent(iface, previous_dag, dag, parent);
 		}
+	}
+
+	if (!parent) {
+		NET_DBG("No parent found.");
+		return;
 	}
 
 	if (net_rpl_of_find(dio->ocp) ||
@@ -2689,6 +2699,10 @@ static void net_rpl_process_dio(struct net_if *iface,
 			if (parent) {
 				net_rpl_move_parent(iface, previous_dag,
 						    dag, parent);
+			} else {
+				NET_DBG("No parent %s found",
+					net_sprint_ipv6_addr(from));
+				return;
 			}
 		}
 	} else {
@@ -3261,6 +3275,10 @@ static int forwarding_dao(struct net_rpl_instance *instance,
 		 * original DAO message.
 		 */
 		if (flags & NET_RPL_DAO_K_FLAG) {
+			/* Coverity CID 173650 complains about reversed
+			 * parameters. This is false positive as dst and
+			 * src parameters are properly set.
+			 */
 			r = dao_ack_send(&dst, &src, net_pkt_iface(pkt),
 					 instance, sequence, 128);
 		}
@@ -3272,10 +3290,10 @@ static int forwarding_dao(struct net_rpl_instance *instance,
 static enum net_verdict handle_dao(struct net_pkt *pkt)
 {
 	struct in6_addr *dao_sender = &NET_IPV6_HDR(pkt)->src;
-	struct net_rpl_route_entry *extra = NULL;
 	struct net_rpl_parent *parent = NULL;
 	enum net_rpl_route_source learned_from;
 	struct net_rpl_instance *instance;
+	struct net_rpl_route_entry *extra;
 	struct net_route_entry *route;
 	struct net_rpl_dag *dag;
 	struct net_buf *frag;
@@ -3440,18 +3458,29 @@ static enum net_verdict handle_dao(struct net_pkt *pkt)
 	}
 #endif
 
+	route = net_route_lookup(net_pkt_iface(pkt), &addr);
+	if (!route) {
+		NET_DBG("No route to %s for iface %p",
+			net_sprint_ipv6_addr(&addr), net_pkt_iface(pkt));
+		return NET_DROP;
+	}
+
+	nbr = net_route_get_nbr(route);
+	if (!nbr) {
+		return NET_DROP;
+	}
+
+	extra = net_nbr_extra_data(nbr);
+
 	if (lifetime == NET_RPL_ZERO_LIFETIME) {
 		struct in6_addr *nexthop;
 
 		NET_DBG("No-Path DAO received");
 
-		route = net_route_lookup(net_pkt_iface(pkt), &addr);
-		nbr = net_route_get_nbr(route);
-		extra = net_nbr_extra_data(nbr);
 		nexthop = net_route_get_nexthop(route);
 
 		/* No-Path DAO received; invoke the route purging routine. */
-		if (route && !extra->no_path_received &&
+		if (route && extra && !extra->no_path_received &&
 		    route->prefix_len == target_len && nexthop &&
 		    net_ipv6_addr_cmp(nexthop, dao_sender)) {
 			NET_DBG("Setting expiration timer for target %s",
@@ -3956,11 +3985,6 @@ static int net_rpl_update_header_empty(struct net_pkt *pkt)
 	    !instance->current_dag->is_joined) {
 		NET_DBG("Incorrect instance so hop-by-hop ext header "
 			"not added");
-		return 0;
-	}
-
-	if (opt_type != NET_IPV6_EXT_HDR_OPT_RPL) {
-		NET_DBG("Multi Hop-by-hop options not implemented");
 		return 0;
 	}
 

@@ -48,6 +48,12 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Network application library
+ * @defgroup net_app Network Application Library
+ * @{
+ */
+
 /** Flags that tell what kind of functionality is needed by the application. */
 #define NET_APP_NEED_ROUTER 0x00000001
 #define NET_APP_NEED_IPV6   0x00000002
@@ -171,6 +177,9 @@ struct tls_context {
 	struct k_sem tx_sem;
 	struct k_fifo tx_rx_fifo;
 	int remaining;
+#if defined(CONFIG_NET_APP_DTLS) && defined(CONFIG_NET_APP_SERVER)
+	char client_id;
+#endif
 };
 
 /* This struct is used to pass data to TLS thread when reading or sending
@@ -233,6 +242,14 @@ typedef int (*net_app_entropy_src_cb_t)(void *data, unsigned char *output,
 					size_t len, size_t *olen);
 #endif /* CONFIG_NET_APP_TLS */
 
+#if defined(CONFIG_NET_APP_DTLS)
+struct dtls_timing_context {
+	u32_t snapshot;
+	u32_t int_ms;
+	u32_t fin_ms;
+};
+#endif /* CONFIG_NET_APP_DTLS */
+
 /* Information for the context and local/remote addresses used. */
 struct net_app_endpoint {
 	/** Network context. */
@@ -272,6 +289,25 @@ struct net_app_ctx {
 	 */
 	net_context_recv_cb_t recv_cb;
 
+#if defined(CONFIG_NET_APP_DTLS)
+	struct {
+		/** Currently active network context. This will contain the
+		 * new context that is created after connection is established
+		 * when UDP and DTLS is used.
+		 */
+		struct net_context *ctx;
+
+		/** DTLS final timer. Connection is terminated if this expires.
+		 */
+		struct k_delayed_work fin_timer;
+
+		/** Timer flag telling whether the dtls timer has been
+		 * cancelled or not.
+		 */
+		bool fin_timer_cancelled;
+	} dtls;
+#endif
+
 #if defined(CONFIG_NET_APP_SERVER)
 	struct {
 #if defined(CONFIG_NET_TCP)
@@ -304,7 +340,7 @@ struct net_app_ctx {
 #if defined(CONFIG_NET_APP_TLS)
 	struct {
 		/** TLS stack for mbedtls library. */
-		u8_t *stack;
+		k_thread_stack_t stack;
 
 		/** TLS stack size. */
 		int stack_size;
@@ -346,6 +382,10 @@ struct net_app_ctx {
 			mbedtls_ctr_drbg_context ctr_drbg;
 			mbedtls_ssl_context ssl;
 			mbedtls_ssl_config conf;
+#if defined(CONFIG_NET_APP_DTLS)
+			mbedtls_ssl_cookie_ctx cookie_ctx;
+			struct dtls_timing_context timing_ctx;
+#endif
 			u8_t *personalization_data;
 			size_t personalization_data_len;
 		} mbedtls;
@@ -369,6 +409,11 @@ struct net_app_ctx {
 
 	/** User data pointer */
 	void *user_data;
+
+#if defined(CONFIG_NET_DEBUG_APP)
+	/** Used when debugging with net-shell */
+	sys_snode_t node;
+#endif
 
 	/** Type of the connection (stream or datagram) */
 	enum net_sock_type sock_type;
@@ -854,7 +899,7 @@ int net_app_client_tls(struct net_app_ctx *ctx,
 		       const char *cert_host,
 		       net_app_entropy_src_cb_t entropy_src_cb,
 		       struct k_mem_pool *pool,
-		       u8_t *stack,
+		       k_thread_stack_t stack,
 		       size_t stack_size);
 #endif /* CONFIG_NET_APP_CLIENT */
 
@@ -890,7 +935,7 @@ int net_app_server_tls(struct net_app_ctx *ctx,
 		       net_app_cert_cb_t cert_cb,
 		       net_app_entropy_src_cb_t entropy_src_cb,
 		       struct k_mem_pool *pool,
-		       u8_t *stack,
+		       k_thread_stack_t stack,
 		       size_t stack_len);
 
 bool net_app_server_tls_enable(struct net_app_ctx *ctx);
@@ -898,6 +943,16 @@ bool net_app_server_tls_disable(struct net_app_ctx *ctx);
 #endif /* CONFIG_NET_APP_SERVER */
 
 #endif /* CONFIG_NET_APP_TLS */
+
+/**
+ * @}
+ */
+
+#if defined(CONFIG_NET_DEBUG_APP)
+typedef void (*net_app_ctx_cb_t)(struct net_app_ctx *ctx, void *user_data);
+void net_app_server_foreach(net_app_ctx_cb_t cb, void *user_data);
+void net_app_client_foreach(net_app_ctx_cb_t cb, void *user_data);
+#endif /* CONFIG_NET_DEBUG_APP */
 
 #ifdef __cplusplus
 }

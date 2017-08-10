@@ -547,22 +547,25 @@ extern FUNC_NORETURN void _SysFatalErrorHandler(unsigned int reason,
  */
 
 #define _ARCH_THREAD_STACK_DEFINE(sym, size) \
-	char _GENERIC_SECTION(.stacks) __aligned(_STACK_BASE_ALIGN) \
-		sym[size + _STACK_GUARD_SIZE]
+	struct _k_thread_stack_element _GENERIC_SECTION(.stacks) \
+		__aligned(_STACK_BASE_ALIGN) \
+		sym[(size) + _STACK_GUARD_SIZE]
 
 #define _ARCH_THREAD_STACK_ARRAY_DEFINE(sym, nmemb, size) \
-	char _GENERIC_SECTION(.stacks) __aligned(_STACK_BASE_ALIGN) \
+	struct _k_thread_stack_element _GENERIC_SECTION(.stacks) \
+		__aligned(_STACK_BASE_ALIGN) \
 		sym[nmemb][ROUND_UP(size, _STACK_BASE_ALIGN) + \
 			   _STACK_GUARD_SIZE]
 
 #define _ARCH_THREAD_STACK_MEMBER(sym, size) \
-	char __aligned(_STACK_BASE_ALIGN) sym[size + _STACK_GUARD_SIZE]
+	struct _k_thread_stack_element __aligned(_STACK_BASE_ALIGN) \
+		sym[(size) + _STACK_GUARD_SIZE]
 
 #define _ARCH_THREAD_STACK_SIZEOF(sym) \
 	(sizeof(sym) - _STACK_GUARD_SIZE)
 
 #define _ARCH_THREAD_STACK_BUFFER(sym) \
-	(sym + _STACK_GUARD_SIZE)
+	((char *)((sym) + _STACK_GUARD_SIZE))
 
 #if CONFIG_X86_KERNEL_OOPS
 #define _ARCH_EXCEPT(reason_p) do { \
@@ -585,6 +588,20 @@ extern u32_t __mmu_tables_start;
 
 #define X86_MMU_PD ((struct x86_mmu_page_directory *)\
 		    (void *)&__mmu_tables_start)
+
+
+/**
+ * @brief Fetch page table flags for a particular page
+ *
+ * Given a memory address, return the flags for the containing page's
+ * PDE and PTE entries. Intended for debugging.
+ *
+ * @param addr Memory address to example
+ * @param pde_flags Output parameter for page directory entry flags
+ * @param pte_flags Output parameter for page table entry flags
+ */
+void _x86_mmu_get_flags(void *addr, u32_t *pde_flags, u32_t *pte_flags);
+
 
 /**
  * @brief set flags in the MMU page tables

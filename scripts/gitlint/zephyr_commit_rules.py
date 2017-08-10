@@ -55,6 +55,17 @@ class SignedOffBy(CommitRule):
                     return
         return [RuleViolation(self.id, "Body does not contain a 'Signed-Off-By' line", line_nr=1)]
 
+class TitleMaxLengthRevert(LineRule):
+    name = "title-max-length-no-revert"
+    id = "UC5"
+    target = CommitMessageTitle
+    options_spec = [IntOption('line-length', 72, "Max line length")]
+    violation_message = "Title exceeds max length ({0}>{1})"
+
+    def validate(self, line, _commit):
+        max_length = self.options['line-length'].value
+        if len(line) > max_length and not line.startswith("Revert"):
+            return [RuleViolation(self.id, self.violation_message.format(len(line), max_length), line)]
 
 class TitleStartsWithSubsystem(LineRule):
     name = "title-starts-with-subsystem"
@@ -78,5 +89,12 @@ class MaxLineLengthExceptions(LineRule):
 
     def validate(self, line, _commit):
         max_length = self.options['line-length'].value
-        if len(line) > max_length and not line.startswith('Signed-off-by'):
+        urls = re.findall('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', line)
+        if line.startswith('Signed-off-by'):
+            return
+
+        if len(urls) > 0:
+            return
+
+        if len(line) > max_length:
             return [RuleViolation(self.id, self.violation_message.format(len(line), max_length), line)]

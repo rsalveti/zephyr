@@ -92,13 +92,21 @@ struct connection {
 
 	union {
 		struct {
+			u8_t reserved:5;
+			u8_t fex_valid:1;
+		} common;
+
+		struct {
 			u8_t terminate_ack:1;
+			u8_t rfu:4;
+			u8_t fex_valid:1;
 		} master;
 
 		struct {
 			u8_t  latency_enabled:1;
 			u8_t  latency_cancel:1;
 			u8_t  sca:3;
+			u8_t  fex_valid:1;
 			u32_t window_widening_periodic_us;
 			u32_t window_widening_max_us;
 			u32_t window_widening_prepare_us;
@@ -234,6 +242,7 @@ struct connection {
 
 	struct radio_pdu_node_tx *pkt_tx_head;
 	struct radio_pdu_node_tx *pkt_tx_ctrl;
+	struct radio_pdu_node_tx *pkt_tx_ctrl_last;
 	struct radio_pdu_node_tx *pkt_tx_data;
 	struct radio_pdu_node_tx *pkt_tx_last;
 	u8_t  packet_tx_head_len;
@@ -252,10 +261,17 @@ struct pdu_data_q_tx {
 	struct radio_pdu_node_tx *node_tx;
 };
 
+/* Extra bytes for enqueued rx_node metadata: rssi and resolving index */
+#if defined(CONFIG_BLUETOOTH_CONTROLLER_PRIVACY)
+#define PDU_AC_SIZE_EXTRA 2
+#else
+#define PDU_AC_SIZE_EXTRA 1
+#endif /* CONFIG_BLUETOOTH_CONTROLLER_PRIVACY */
+
 /* Minimum Rx Data allocation size */
 #define PACKET_RX_DATA_SIZE_MIN \
 			MROUND(offsetof(struct radio_pdu_node_rx, pdu_data) + \
-			(PDU_AC_SIZE_MAX + 1))
+			(PDU_AC_SIZE_MAX + PDU_AC_SIZE_EXTRA))
 
 /* Minimum Tx Ctrl allocation size */
 #define PACKET_TX_CTRL_SIZE_MIN \
@@ -275,13 +291,13 @@ struct pdu_data_q_tx {
 
 #define LL_MEM_RX_POOL_SZ (MROUND(offsetof(struct radio_pdu_node_rx,\
 				pdu_data) + ((\
-			(PDU_AC_SIZE_MAX + 1) < \
+			(PDU_AC_SIZE_MAX + PDU_AC_SIZE_EXTRA) < \
 			 (offsetof(struct pdu_data, payload) + \
 			  RADIO_LL_LENGTH_OCTETS_RX_MAX)) ? \
 		      (offsetof(struct pdu_data, payload) + \
 		      RADIO_LL_LENGTH_OCTETS_RX_MAX) \
 			: \
-		      (PDU_AC_SIZE_MAX + 1))) * \
+		      (PDU_AC_SIZE_MAX + PDU_AC_SIZE_EXTRA))) * \
 			(RADIO_PACKET_COUNT_RX_MAX + 3))
 
 #define LL_MEM_RX_LINK_POOL (sizeof(void *) * 2 * ((RADIO_PACKET_COUNT_RX_MAX +\

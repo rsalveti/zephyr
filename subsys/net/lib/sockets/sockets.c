@@ -26,6 +26,9 @@
 
 static struct k_poll_event poll_events[CONFIG_NET_SOCKETS_POLL_MAX];
 
+static void zsock_received_cb(struct net_context *ctx, struct net_pkt *pkt,
+			      int status, void *user_data);
+
 static inline void sock_set_flag(struct net_context *ctx, u32_t mask,
 				 u32_t flag)
 {
@@ -87,7 +90,8 @@ int zsock_close(int sock)
 	struct net_context *ctx = INT_TO_POINTER(sock);
 
 	/* Reset callbacks to avoid any race conditions while
-	 * flushing queues.
+	 * flushing queues. No need to check return values here
+	 * as Coverity complains in CID 173646.
 	 */
 	net_context_accept(ctx, NULL, K_NO_WAIT, NULL);
 	net_context_recv(ctx, NULL, K_NO_WAIT, NULL);
@@ -102,6 +106,8 @@ static void zsock_accepted_cb(struct net_context *new_ctx,
 			      struct sockaddr *addr, socklen_t addrlen,
 			      int status, void *user_data) {
 	struct net_context *parent = user_data;
+
+	net_context_recv(new_ctx, zsock_received_cb, K_NO_WAIT, NULL);
 
 	NET_DBG("parent=%p, ctx=%p, st=%d", parent, new_ctx, status);
 
@@ -140,6 +146,10 @@ static void zsock_received_cb(struct net_context *ctx, struct net_pkt *pkt,
 	/* We don't care about packet header, so get rid of it asap */
 	header_len = net_pkt_appdata(pkt) - pkt->frags->data;
 	net_buf_pull(pkt->frags, header_len);
+
+	if (net_context_get_type(ctx) == SOCK_STREAM) {
+		net_context_update_recv_wnd(ctx, -net_pkt_appdatalen(pkt));
+	}
 
 	k_fifo_put(&ctx->recv_q, pkt);
 }
@@ -187,8 +197,6 @@ int zsock_accept(int sock, struct sockaddr *addr, socklen_t *addrlen)
 	struct net_context *parent = INT_TO_POINTER(sock);
 
 	struct net_context *ctx = k_fifo_get(&parent->accept_q, K_FOREVER);
-
-	SET_ERRNO(net_context_recv(ctx, zsock_received_cb, K_NO_WAIT, NULL));
 
 	if (addr != NULL && addrlen != NULL) {
 		int len = min(*addrlen, sizeof(ctx->remote));
@@ -311,6 +319,8 @@ static inline ssize_t zsock_recv_stream(struct net_context *ctx, void *buf, size
 		}
 	} while (recv_len == 0);
 
+	net_context_update_recv_wnd(ctx, recv_len);
+
 	return recv_len;
 }
 
@@ -399,7 +409,7 @@ int zsock_poll(struct zsock_pollfd *fds, int nfds, int timeout)
 			continue;
 		}
 
-		if (pfd->events & POLLIN) {
+		if (pfd->events & ZSOCK_POLLIN) {
 			struct net_context *ctx = INT_TO_POINTER(pfd->fd);
 
 			if (pev == pev_end) {
@@ -432,13 +442,13 @@ int zsock_poll(struct zsock_pollfd *fds, int nfds, int timeout)
 		}
 
 		/* For now, assume that socket is always writable */
-		if (pfd->events & POLLOUT) {
-			pfd->revents |= POLLOUT;
+		if (pfd->events & ZSOCK_POLLOUT) {
+			pfd->revents |= ZSOCK_POLLOUT;
 		}
 
-		if (pfd->events & POLLIN) {
+		if (pfd->events & ZSOCK_POLLIN) {
 			if (pev->state != K_POLL_STATE_NOT_READY) {
-				pfd->revents |= POLLIN;
+				pfd->revents |= ZSOCK_POLLIN;
 			}
 			pev++;
 		}

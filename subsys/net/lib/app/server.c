@@ -120,7 +120,15 @@ int net_app_listen(struct net_app_ctx *ctx)
 		net_context_put(ctx->ipv4.ctx);
 		ctx->ipv4.ctx = NULL;
 	}
+#if defined(CONFIG_NET_APP_DTLS)
+	else {
+		if (ctx->is_tls && ctx->proto == IPPROTO_UDP) {
+			net_context_recv(ctx->ipv4.ctx, ctx->recv_cb,
+					 K_NO_WAIT, ctx);
+		}
+	}
 #endif
+#endif /* CONFIG_NET_IPV4 */
 
 	/* We ignore the IPv4 error if IPv6 is enabled */
 
@@ -138,7 +146,15 @@ int net_app_listen(struct net_app_ctx *ctx)
 		net_context_put(ctx->ipv6.ctx);
 		ctx->ipv6.ctx = NULL;
 	}
+#if defined(CONFIG_NET_APP_DTLS)
+	else {
+		if (ctx->is_tls && ctx->proto == IPPROTO_UDP) {
+			net_context_recv(ctx->ipv6.ctx, ctx->recv_cb,
+					 K_NO_WAIT, ctx);
+		}
+	}
 #endif
+#endif /* CONFIG_NET_IPV6 */
 
 	return ret;
 }
@@ -215,6 +231,8 @@ int net_app_init_server(struct net_app_ctx *ctx,
 	NET_ASSERT_INFO(ctx->default_ctx, "Default ctx not selected");
 
 	ctx->is_init = true;
+
+	_net_app_register(ctx);
 
 fail:
 	return ret;
@@ -342,7 +360,7 @@ int net_app_server_tls(struct net_app_ctx *ctx,
 		       net_app_cert_cb_t cert_cb,
 		       net_app_entropy_src_cb_t entropy_src_cb,
 		       struct k_mem_pool *pool,
-		       u8_t *stack,
+		       k_thread_stack_t stack,
 		       size_t stack_size)
 {
 	if (!request_buf || request_buf_len == 0) {

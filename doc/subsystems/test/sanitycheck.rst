@@ -7,7 +7,7 @@ and attempts to execute them. By default, it tries to build each test case
 boards set to be default in the board definition file.
 
 The default options will build the  majority of the tests on a defined set of
-boards and will run in emulated environemnts (QEMU) if available for the
+boards and will run in emulated environments (QEMU) if available for the
 architecture or configuration being tested.
 
 In general, the sanitycheck is used to verify that local changes did not break
@@ -49,7 +49,7 @@ The sanitycheck script accepts the following optional arguments:
                         Controls what platforms are tested if --platform or
                         --all are not used. For each architecture specified by
                         --arch (defaults to all of them), choose the first N
-                        platforms to test in the arch-specific .ini file
+                        platforms to test in the arch-specific .yaml file
                         'platforms' list. Defaults to 1.
   -a ARCH, --arch ARCH  Arch filter for testing. Takes precedence over
                         --platform. If unspecified, test all arches. Multiple
@@ -74,7 +74,7 @@ The sanitycheck script accepts the following optional arguments:
                         match.
   -s TEST, --test TEST  Run only the specified test cases. These are named by
                         <path to test project relative to --testcase-
-                        root>/<testcase.ini section name>
+                        root>/<testcase.yaml section name>
   -l, --all             Build/test on all platforms. Any --platform arguments
                         ignored.
   -o TESTCASE_REPORT, --testcase-report TESTCASE_REPORT
@@ -127,17 +127,17 @@ The sanitycheck script accepts the following optional arguments:
                         in faster compilation since builds will be incremental
   -T TESTCASE_ROOT, --testcase-root TESTCASE_ROOT
                         Base directory to recursively search for test cases.
-                        All testcase.ini files under here will be processed.
+                        All testcase.yaml files under here will be processed.
                         May be called multiple times. Defaults to the
                         'samples' and 'tests' directories in the Zephyr tree.
   -A ARCH_ROOT, --arch-root ARCH_ROOT
                         Directory to search for arch configuration files. All
-                        .ini files in the directory will be processed.
+                        .yaml files in the directory will be processed.
   -z SIZE, --size SIZE  Don't run sanity checks. Instead, produce a report to
                         stdout detailing RAM/ROM sizes on the specified
                         filenames. All other command line arguments ignored.
   -S, --enable-slow     Execute time-consuming test cases that have been
-                        marked as 'slow' in testcase.ini. Normally these are
+                        marked as 'slow' in testcase.yaml. Normally these are
                         only built.
   -R, --enable-asserts  Build all test cases with assertions enabled.
   -Q, --error-on-deprecations
@@ -201,6 +201,27 @@ ram:
 flash:
   Available FLASH on the board (specified in KB). This is used to match testcase
   requirements.  If not specified we default to 512KB.
+supported:
+  A list of features this board supports. This can be specified as a single word
+  feature or as a variant of a feature class. For example:
+
+  ::
+
+        supported:
+          - pci
+
+  This indicates the board does support PCI. You can make a testcase build or
+  run only on such boards, or:
+
+  ::
+
+        supported:
+          - netif:eth
+          - sensor:bmi16
+
+  A testcase can both depend on 'eth' to only test ethernet or on 'netif' to run
+  on any board with a networking interface.
+
 testing:
   testing relating keywords to provide best coverage for the features of this
   board.
@@ -227,7 +248,7 @@ that testcase meta-data.
 
 Test cases are written suing the YAML syntax and share the same structure as
 samples. The following is an example test with a few options that are
-exaplained in this document.
+explained in this document.
 
 
 ::

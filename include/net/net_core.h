@@ -17,6 +17,12 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Network core library
+ * @defgroup net_core Network Core Library
+ * @{
+ */
+
 /* Network subsystem logging helpers */
 
 #if defined(NET_LOG_ENABLED)
@@ -89,7 +95,7 @@ int net_recv_data(struct net_if *iface, struct net_pkt *pkt);
 int net_send_data(struct net_pkt *pkt);
 
 struct net_stack_info {
-	char *stack;
+	k_thread_stack_t stack;
 	const char *pretty_name;
 	const char *name;
 	size_t orig_size;
@@ -163,6 +169,10 @@ static inline void net_analyze_stack(const char *name,
 #define net_analyze_stack_get_values(...)
 #endif
 /* @endcond */
+
+/**
+ * @}
+ */
 
 #ifdef __cplusplus
 }

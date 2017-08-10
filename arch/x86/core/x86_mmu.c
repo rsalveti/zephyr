@@ -4,13 +4,37 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include<kernel.h>
-#include<mmustructs.h>
+#include <kernel.h>
+#include <mmustructs.h>
+#include <linker/linker-defs.h>
 
 /* Ref to _x86_mmu_buffer_validate documentation for details  */
 #define USER_PERM_BIT_POS ((u32_t)0x1)
 #define GET_RW_PERM(flags) (flags & BUFF_WRITEABLE)
 #define GET_US_PERM(flags) ((flags & BUFF_USER) >> USER_PERM_BIT_POS)
+
+/* Common regions for all x86 processors.
+ * Peripheral I/O ranges configured at the SOC level
+ */
+
+/* Mark text and rodata as read-only.
+ * Userspace may read all text and rodata.
+ */
+MMU_BOOT_REGION((u32_t)&_image_rom_start, (u32_t)&_image_rom_size,
+		MMU_ENTRY_READ | MMU_ENTRY_USER);
+
+#ifdef CONFIG_APPLICATION_MEMORY
+/* User threads by default can read/write app-level memory. */
+MMU_BOOT_REGION((u32_t)&__app_ram_start, (u32_t)&__app_ram_size,
+		MMU_ENTRY_WRITE | MMU_ENTRY_USER);
+#endif
+
+/* __kernel_ram_size includes all unused memory, which is used for heaps.
+ * User threads cannot access this unless granted at runtime. This is done
+ * automatically for stacks.
+ */
+MMU_BOOT_REGION((u32_t)&__kernel_ram_start, (u32_t)&__kernel_ram_size,
+		MMU_ENTRY_WRITE | MMU_ENTRY_RUNTIME_USER);
 
 /**
  * brief check page directory flags
@@ -62,6 +86,26 @@ static inline u32_t check_pte_flags(union x86_mmu_pte pte,
 	return(pte.p &&
 		(pte.rw >= rw_permission)  &&
 		!(pte.us < us_permission));
+}
+
+
+void _x86_mmu_get_flags(void *addr, u32_t *pde_flags, u32_t *pte_flags)
+{
+	int pde_index, pte_index;
+
+	union x86_mmu_pde *pde;
+	union x86_mmu_pte *pte;
+	struct x86_mmu_page_table *pt;
+
+	pde_index = MMU_PDE_NUM(addr);
+	pte_index = MMU_PAGE_NUM(addr);
+
+	pde = &X86_MMU_PD->entry[pde_index];
+	pt = (struct x86_mmu_page_table *)(pde->pt.page_table << 12);
+	pte = &pt->entry[pte_index];
+
+	*pde_flags = pde->pt.value & ~MMU_PDE_PAGE_TABLE_MASK;
+	*pte_flags = pte->value & ~MMU_PTE_PAGE_MASK;
 }
 
 

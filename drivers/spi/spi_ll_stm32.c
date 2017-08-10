@@ -25,52 +25,152 @@
 #define CONFIG_DATA(cfg)					\
 ((struct spi_stm32_data * const)(cfg)->dev->driver_data)
 
-#ifdef CONFIG_SPI_STM32_INTERRUPT
-static void spi_stm32_transmit(SPI_TypeDef *spi, struct spi_stm32_data *data);
-static void spi_stm32_receive(SPI_TypeDef *spi, struct spi_stm32_data *data);
+#ifdef LL_SPI_SR_UDR
+#define SPI_STM32_ERR_MSK (LL_SPI_SR_UDR | LL_SPI_SR_CRCERR | LL_SPI_SR_MODF | \
+			   LL_SPI_SR_OVR | LL_SPI_SR_FRE)
+#else
+#define SPI_STM32_ERR_MSK (LL_SPI_SR_CRCERR | LL_SPI_SR_MODF | \
+			   LL_SPI_SR_OVR | LL_SPI_SR_FRE)
+#endif
 
+/* Value to shift out when no application data needs transmitting. */
+#define SPI_STM32_TX_NOP 0x00
+
+static bool spi_stm32_transfer_ongoing(struct spi_stm32_data *data)
+{
+	return spi_context_tx_on(&data->ctx) || spi_context_rx_on(&data->ctx);
+}
+
+static int spi_stm32_get_err(SPI_TypeDef *spi)
+{
+	u32_t sr = LL_SPI_ReadReg(spi, SR);
+
+	return (int)(sr & SPI_STM32_ERR_MSK);
+}
+
+static inline u8_t spi_stm32_next_tx(struct spi_stm32_data *data)
+{
+	return spi_context_tx_on(&data->ctx) ?
+		*data->ctx.tx_buf : SPI_STM32_TX_NOP;
+}
+
+/* Shift a SPI frame as master. */
+static void spi_stm32_shift_m(SPI_TypeDef *spi, struct spi_stm32_data *data)
+{
+	u8_t tx_frame;
+	u8_t rx_frame;
+
+	tx_frame = spi_stm32_next_tx(data);
+	while (!LL_SPI_IsActiveFlag_TXE(spi)) {
+		/* NOP */
+	}
+	LL_SPI_TransmitData8(spi, tx_frame);
+	/* The update is ignored if TX is off. */
+	spi_context_update_tx(&data->ctx, 1);
+
+	while (!LL_SPI_IsActiveFlag_RXNE(spi)) {
+		/* NOP */
+	}
+	rx_frame = LL_SPI_ReceiveData8(spi);
+	if (spi_context_rx_on(&data->ctx)) {
+		*data->ctx.rx_buf = rx_frame;
+		spi_context_update_rx(&data->ctx, 1);
+	}
+}
+
+/* Shift a SPI frame as slave. */
+static void spi_stm32_shift_s(SPI_TypeDef *spi, struct spi_stm32_data *data)
+{
+	u8_t tx_frame;
+	u8_t rx_frame;
+
+	tx_frame = spi_stm32_next_tx(data);
+	if (LL_SPI_IsActiveFlag_TXE(spi)) {
+		LL_SPI_TransmitData8(spi, tx_frame);
+		/* The update is ignored if TX is off. */
+		spi_context_update_tx(&data->ctx, 1);
+	}
+
+	if (LL_SPI_IsActiveFlag_RXNE(spi)) {
+		rx_frame = LL_SPI_ReceiveData8(spi);
+		if (spi_context_rx_on(&data->ctx)) {
+			*data->ctx.rx_buf = rx_frame;
+			spi_context_update_rx(&data->ctx, 1);
+		}
+	}
+}
+
+/*
+ * Without a FIFO, we can only shift out one frame's worth of SPI
+ * data, and read the response back.
+ *
+ * TODO: support 16-bit data frames.
+ */
+static int spi_stm32_shift_frames(SPI_TypeDef *spi, struct spi_stm32_data *data)
+{
+	u16_t operation = data->ctx.config->operation;
+
+	if (SPI_OP_MODE_GET(operation) == SPI_OP_MODE_MASTER) {
+		spi_stm32_shift_m(spi, data);
+	} else {
+		spi_stm32_shift_s(spi, data);
+	}
+
+	return spi_stm32_get_err(spi);
+}
+
+static void spi_stm32_complete(struct spi_stm32_data *data, SPI_TypeDef *spi,
+			       int status)
+{
+#ifdef CONFIG_SPI_STM32_INTERRUPT
+	LL_SPI_DisableIT_TXE(spi);
+	LL_SPI_DisableIT_RXNE(spi);
+	LL_SPI_DisableIT_ERR(spi);
+#endif
+
+	spi_context_cs_control(&data->ctx, false);
+
+#if defined(CONFIG_SOC_SERIES_STM32L4X) || defined(CONFIG_SOC_SERIES_STM32F3X)
+	/* Flush RX buffer */
+	while (LL_SPI_IsActiveFlag_RXNE(spi)) {
+		(void) LL_SPI_ReceiveData8(spi);
+	}
+#endif
+
+	if (LL_SPI_GetMode(spi) == LL_SPI_MODE_MASTER) {
+		while (LL_SPI_IsActiveFlag_BSY(spi)) {
+			/* NOP */
+		}
+	}
+
+	LL_SPI_Disable(spi);
+
+#ifdef CONFIG_SPI_STM32_INTERRUPT
+	spi_context_complete(&data->ctx, status);
+#endif
+}
+
+#ifdef CONFIG_SPI_STM32_INTERRUPT
 static void spi_stm32_isr(void *arg)
 {
 	struct device * const dev = (struct device *) arg;
 	const struct spi_stm32_config *cfg = dev->config->config_info;
 	struct spi_stm32_data *data = dev->driver_data;
 	SPI_TypeDef *spi = cfg->spi;
+	int err;
 
-	if (LL_SPI_IsActiveFlag_TXE(spi) &&
-	    (spi_context_tx_on(&data->ctx) || spi_context_rx_on(&data->ctx))) {
-		spi_stm32_transmit(spi, data);
+	err = spi_stm32_get_err(spi);
+	if (err) {
+		spi_stm32_complete(data, spi, err);
+		return;
 	}
 
-	if (LL_SPI_IsActiveFlag_RXNE(spi)) {
-		if (spi_context_rx_on(&data->ctx)) {
-			spi_stm32_receive(spi, data);
-		} else {
-			LL_SPI_DisableIT_RXNE(spi);
-		}
+	if (spi_stm32_transfer_ongoing(data)) {
+		err = spi_stm32_shift_frames(spi, data);
 	}
 
-	if (!spi_context_tx_on(&data->ctx) &&
-	    !spi_context_rx_on(&data->ctx)) {
-		LL_SPI_DisableIT_TXE(spi);
-		LL_SPI_DisableIT_RXNE(spi);
-
-		spi_context_cs_control(&data->ctx, false);
-
-#if defined(CONFIG_SOC_SERIES_STM32L4X) || defined(CONFIG_SOC_SERIES_STM32F3X)
-		/* Flush RX buffer */
-		while (LL_SPI_IsActiveFlag_RXNE(spi)) {
-			(void) LL_SPI_ReceiveData8(spi);
-		}
-#endif
-
-		if (LL_SPI_GetMode(spi) == LL_SPI_MODE_MASTER) {
-			while (LL_SPI_IsActiveFlag_BSY(spi)) {
-				/* NOP */
-			}
-			LL_SPI_Disable(spi);
-		}
-
-		spi_context_complete(&data->ctx, 0);
+	if (err || !spi_stm32_transfer_ongoing(data)) {
+		spi_stm32_complete(data, spi, err);
 	}
 }
 #endif
@@ -156,9 +256,9 @@ static int spi_stm32_configure(struct spi_config *config)
 		LL_SPI_SetNSSMode(spi, LL_SPI_NSS_SOFT);
 	} else {
 		if (config->operation & SPI_OP_MODE_SLAVE) {
-			LL_SPI_SetNSSMode(spi, LL_SPI_NSS_HARD_OUTPUT);
+			LL_SPI_SetNSSMode(spi, LL_SPI_NSS_HARD_INPUT);
 		} else {
-			LL_SPI_SetNSSMode(spi, LL_SPI_NSS_SOFT);
+			LL_SPI_SetNSSMode(spi, LL_SPI_NSS_HARD_OUTPUT);
 		}
 	}
 
@@ -183,32 +283,6 @@ static int spi_stm32_configure(struct spi_config *config)
 		    config->slave);
 
 	return 0;
-}
-
-static void spi_stm32_transmit(SPI_TypeDef *spi, struct spi_stm32_data *data)
-{
-	if (spi_context_tx_on(&data->ctx)) {
-		LL_SPI_TransmitData8(spi, UNALIGNED_GET((u8_t *)
-							(data->ctx.tx_buf)));
-	} else {
-		/* Transmit NOP byte */
-		LL_SPI_TransmitData8(spi, 0);
-	}
-
-	spi_context_update_tx(&data->ctx, 1);
-}
-
-static void spi_stm32_receive(SPI_TypeDef *spi, struct spi_stm32_data *data)
-{
-	if (spi_context_rx_on(&data->ctx)) {
-		u8_t byte = LL_SPI_ReceiveData8(spi);
-
-		UNALIGNED_PUT(byte, (u8_t *)data->ctx.rx_buf);
-	} else {
-		LL_SPI_ReceiveData8(spi);
-	}
-
-	spi_context_update_rx(&data->ctx, 1);
 }
 
 static int spi_stm32_release(struct spi_config *config)
@@ -260,52 +334,34 @@ static int transceive(struct spi_config *config,
 
 	LL_SPI_Enable(spi);
 
+	/* This is turned off in spi_stm32_complete(). */
 	spi_context_cs_control(&data->ctx, true);
 
 #ifdef CONFIG_SPI_STM32_INTERRUPT
+	LL_SPI_EnableIT_ERR(spi);
+
 	if (rx_bufs) {
 		LL_SPI_EnableIT_RXNE(spi);
 	}
 
 	LL_SPI_EnableIT_TXE(spi);
 
-	spi_context_wait_for_completion(&data->ctx);
+	ret = spi_context_wait_for_completion(&data->ctx);
 #else
 	do {
-		/* Keep transmitting NOP data until RX data left */
-		if ((spi_context_tx_on(&data->ctx) ||
-		     spi_context_rx_on(&data->ctx)) &&
-		    LL_SPI_IsActiveFlag_TXE(spi)) {
-			spi_stm32_transmit(spi, data);
-		}
+		ret = spi_stm32_shift_frames(spi, data);
+	} while (!ret && spi_stm32_transfer_ongoing(data));
 
-		if (spi_context_rx_on(&data->ctx) &&
-		    LL_SPI_IsActiveFlag_RXNE(spi)) {
-			spi_stm32_receive(spi, data);
-		}
-	} while (spi_context_tx_on(&data->ctx) ||
-		 spi_context_rx_on(&data->ctx));
-
-	spi_context_complete(&data->ctx, 0);
-
-#if defined(CONFIG_SOC_SERIES_STM32L4X) || defined(CONFIG_SOC_SERIES_STM32F3X)
-	/* Flush RX buffer */
-	while (LL_SPI_IsActiveFlag_RXNE(spi)) {
-		(void) LL_SPI_ReceiveData8(spi);
-	}
+	spi_stm32_complete(data, spi, ret);
 #endif
 
-	if (LL_SPI_GetMode(spi) == LL_SPI_MODE_MASTER) {
-		while (LL_SPI_IsActiveFlag_BSY(spi)) {
-			/* NOP */
-		}
-		LL_SPI_Disable(spi);
+	spi_context_release(&data->ctx, ret);
+
+	if (ret) {
+		SYS_LOG_ERR("error mask 0x%x", ret);
 	}
-#endif
 
-	spi_context_release(&data->ctx, 0);
-
-	return 0;
+	return ret ? -EIO : 0;
 }
 
 static int spi_stm32_transceive(struct spi_config *config,

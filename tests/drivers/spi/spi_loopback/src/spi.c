@@ -10,6 +10,7 @@
 #include <zephyr.h>
 #include <misc/printk.h>
 #include <string.h>
+#include <stdio.h>
 
 #include <spi.h>
 
@@ -60,6 +61,19 @@ struct spi_cs_control spi_cs = {
 #define SPI_CS NULL
 #define CS_CTRL_GPIO_DRV_NAME ""
 
+#elif defined(CONFIG_BOARD_96B_CARBON)
+
+#define SPI_DRV_NAME CONFIG_SPI_2_NAME
+#define SPI_SLAVE 0
+#define MIN_FREQ 500000
+
+#define CS_CTRL_GPIO_DRV_NAME "GPIOC"
+
+struct spi_cs_control spi_cs = {
+	.gpio_pin = 3,
+	.delay = 0,
+};
+
 #else
 #undef SPI_CS
 #define SPI_CS NULL
@@ -69,6 +83,22 @@ struct spi_cs_control spi_cs = {
 #define BUF_SIZE 17
 u8_t buffer_tx[] = "0123456789abcdef\0";
 u8_t buffer_rx[BUF_SIZE] = {};
+
+/*
+ * We need 5x(buffer size) + 1 to print a comma-separated list of each
+ * byte in hex, plus a null.
+ */
+u8_t buffer_print_tx[BUF_SIZE * 5 + 1];
+u8_t buffer_print_rx[BUF_SIZE * 5 + 1];
+
+static void to_display_format(const u8_t *src, size_t size, char *dst)
+{
+	size_t i;
+
+	for (i = 0; i < size; i++) {
+		sprintf(dst + 5 * i, "0x%02x,", src[i]);
+	}
+}
 
 struct spi_config spi_slow = {
 #if defined(MIN_FREQ)
@@ -120,6 +150,8 @@ static int spi_complete_loop(struct spi_config *spi_conf)
 	};
 	int ret;
 
+	SYS_LOG_INF("Start");
+
 	ret = spi_transceive(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
 			     rx_bufs, ARRAY_SIZE(rx_bufs));
 	if (ret) {
@@ -128,12 +160,16 @@ static int spi_complete_loop(struct spi_config *spi_conf)
 	}
 
 	if (memcmp(buffer_tx, buffer_rx, BUF_SIZE)) {
-		SYS_LOG_ERR("Buffer contents are different %s vs %s",
-			    buffer_tx, buffer_rx);
+		to_display_format(buffer_tx, BUF_SIZE, buffer_print_tx);
+		to_display_format(buffer_rx, BUF_SIZE, buffer_print_rx);
+		SYS_LOG_ERR("Buffer contents are different: %s",
+			    buffer_print_tx);
+		SYS_LOG_ERR("                           vs: %s",
+			    buffer_print_rx);
 		return -1;
 	}
 
-	SYS_LOG_DBG("Passed");
+	SYS_LOG_INF("Passed");
 
 	return 0;
 }
@@ -154,6 +190,8 @@ static int spi_rx_half_start(struct spi_config *spi_conf)
 	};
 	int ret;
 
+	SYS_LOG_INF("Start");
+
 	memset(buffer_rx, 0, BUF_SIZE);
 
 	ret = spi_transceive(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
@@ -164,11 +202,16 @@ static int spi_rx_half_start(struct spi_config *spi_conf)
 	}
 
 	if (memcmp(buffer_tx, buffer_rx, 8)) {
-		SYS_LOG_ERR("Buffer contents are different");
+		to_display_format(buffer_tx, 8, buffer_print_tx);
+		to_display_format(buffer_rx, 8, buffer_print_rx);
+		SYS_LOG_ERR("Buffer contents are different: %s",
+			    buffer_print_tx);
+		SYS_LOG_ERR("                           vs: %s",
+			    buffer_print_rx);
 		return -1;
 	}
 
-	SYS_LOG_DBG("Passed");
+	SYS_LOG_INF("Passed");
 
 	return 0;
 }
@@ -193,6 +236,8 @@ static int spi_rx_half_end(struct spi_config *spi_conf)
 	};
 	int ret;
 
+	SYS_LOG_INF("Start");
+
 	memset(buffer_rx, 0, BUF_SIZE);
 
 	ret = spi_transceive(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
@@ -203,11 +248,16 @@ static int spi_rx_half_end(struct spi_config *spi_conf)
 	}
 
 	if (memcmp(buffer_tx+8, buffer_rx, 8)) {
-		SYS_LOG_ERR("Buffer contents are different");
+		to_display_format(buffer_tx + 8, 8, buffer_print_tx);
+		to_display_format(buffer_rx, 8, buffer_print_rx);
+		SYS_LOG_ERR("Buffer contents are different: %s",
+			    buffer_print_tx);
+		SYS_LOG_ERR("                           vs: %s",
+			    buffer_print_rx);
 		return -1;
 	}
 
-	SYS_LOG_DBG("Passed");
+	SYS_LOG_INF("Passed");
 
 	return 0;
 }
@@ -240,6 +290,8 @@ static int spi_rx_every_4(struct spi_config *spi_conf)
 	};
 	int ret;
 
+	SYS_LOG_INF("Start");
+
 	memset(buffer_rx, 0, BUF_SIZE);
 
 	ret = spi_transceive(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
@@ -249,13 +301,25 @@ static int spi_rx_every_4(struct spi_config *spi_conf)
 		return -1;
 	}
 
-	if (memcmp(buffer_tx + 4, buffer_rx, 4) ||
-	    memcmp(buffer_tx + 12, buffer_rx + 4, 4)) {
-		SYS_LOG_ERR("Buffer contents are different");
+	if (memcmp(buffer_tx + 4, buffer_rx, 4)) {
+		to_display_format(buffer_tx + 4, 4, buffer_print_tx);
+		to_display_format(buffer_rx, 4, buffer_print_rx);
+		SYS_LOG_ERR("Buffer contents are different: %s",
+			    buffer_print_tx);
+		SYS_LOG_ERR("                           vs: %s",
+			    buffer_print_rx);
+		return -1;
+	} else if (memcmp(buffer_tx + 12, buffer_rx + 4, 4)) {
+		to_display_format(buffer_tx + 12, 4, buffer_print_tx);
+		to_display_format(buffer_rx + 4, 4, buffer_print_rx);
+		SYS_LOG_ERR("Buffer contents are different: %s",
+			    buffer_print_tx);
+		SYS_LOG_ERR("                           vs: %s",
+			    buffer_print_rx);
 		return -1;
 	}
 
-	SYS_LOG_DBG("Passed");
+	SYS_LOG_INF("Passed");
 
 	return 0;
 }
@@ -303,6 +367,8 @@ static int spi_async_call(struct spi_config *spi_conf)
 	};
 	int ret;
 
+	SYS_LOG_INF("Start");
+
 	ret = spi_transceive_async(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
 				   rx_bufs, ARRAY_SIZE(rx_bufs), &async_sig);
 	if (ret == -ENOTSUP) {
@@ -322,12 +388,12 @@ static int spi_async_call(struct spi_config *spi_conf)
 		return -1;
 	}
 
-	SYS_LOG_DBG("Passed");
+	SYS_LOG_INF("Passed");
 
 	return 0;
 }
 
-static int spi_ressource_lock_test(struct spi_config *spi_conf_lock,
+static int spi_resource_lock_test(struct spi_config *spi_conf_lock,
 				   struct spi_config *spi_conf_try)
 {
 	spi_conf_lock->operation |= SPI_LOCK_ON;
@@ -353,7 +419,7 @@ void main(void)
 	struct k_thread async_thread;
 	k_tid_t async_thread_id;
 
-	SYS_LOG_INF("SPI test on buffex TX/RX %p/%p", buffer_tx, buffer_rx);
+	SYS_LOG_INF("SPI test on buffers TX/RX %p/%p", buffer_tx, buffer_rx);
 
 	if (cs_ctrl_gpio_config(spi_slow.cs) ||
 	    cs_ctrl_gpio_config(spi_fast.cs)) {
@@ -389,11 +455,11 @@ void main(void)
 		goto end;
 	}
 
-	if (spi_ressource_lock_test(&spi_slow, &spi_fast)) {
+	if (spi_resource_lock_test(&spi_slow, &spi_fast)) {
 		goto end;
 	}
 
 	SYS_LOG_INF("All tx/rx passed");
 end:
-	k_thread_cancel(async_thread_id);
+	k_thread_abort(async_thread_id);
 }
