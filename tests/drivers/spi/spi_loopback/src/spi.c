@@ -133,8 +133,6 @@ static int spi_complete_loop(struct spi_config *spi_conf)
 	};
 	int ret;
 
-	SYS_LOG_INF("Start");
-
 	ret = spi_transceive(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
 			     rx_bufs, ARRAY_SIZE(rx_bufs));
 	if (ret) {
@@ -148,7 +146,7 @@ static int spi_complete_loop(struct spi_config *spi_conf)
 		return -1;
 	}
 
-	SYS_LOG_INF("Passed");
+	SYS_LOG_DBG("Passed");
 
 	return 0;
 }
@@ -169,8 +167,6 @@ static int spi_rx_half_start(struct spi_config *spi_conf)
 	};
 	int ret;
 
-	SYS_LOG_INF("Start");
-
 	memset(buffer_rx, 0, BUF_SIZE);
 
 	ret = spi_transceive(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
@@ -185,7 +181,7 @@ static int spi_rx_half_start(struct spi_config *spi_conf)
 		return -1;
 	}
 
-	SYS_LOG_INF("Passed");
+	SYS_LOG_DBG("Passed");
 
 	return 0;
 }
@@ -210,8 +206,6 @@ static int spi_rx_half_end(struct spi_config *spi_conf)
 	};
 	int ret;
 
-	SYS_LOG_INF("Start");
-
 	memset(buffer_rx, 0, BUF_SIZE);
 
 	ret = spi_transceive(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
@@ -226,7 +220,7 @@ static int spi_rx_half_end(struct spi_config *spi_conf)
 		return -1;
 	}
 
-	SYS_LOG_INF("Passed");
+	SYS_LOG_DBG("Passed");
 
 	return 0;
 }
@@ -259,8 +253,6 @@ static int spi_rx_every_4(struct spi_config *spi_conf)
 	};
 	int ret;
 
-	SYS_LOG_INF("Start");
-
 	memset(buffer_rx, 0, BUF_SIZE);
 
 	ret = spi_transceive(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
@@ -276,7 +268,7 @@ static int spi_rx_every_4(struct spi_config *spi_conf)
 		return -1;
 	}
 
-	SYS_LOG_INF("Passed");
+	SYS_LOG_DBG("Passed");
 
 	return 0;
 }
@@ -324,8 +316,6 @@ static int spi_async_call(struct spi_config *spi_conf)
 	};
 	int ret;
 
-	SYS_LOG_INF("Start");
-
 	ret = spi_transceive_async(spi_conf, tx_bufs, ARRAY_SIZE(tx_bufs),
 				   rx_bufs, ARRAY_SIZE(rx_bufs), &async_sig);
 	if (ret == -ENOTSUP) {
@@ -345,7 +335,7 @@ static int spi_async_call(struct spi_config *spi_conf)
 		return -1;
 	}
 
-	SYS_LOG_INF("Passed");
+	SYS_LOG_DBG("Passed");
 
 	return 0;
 }
