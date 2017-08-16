@@ -34,6 +34,13 @@
 #include "tcp.h"
 #include "net_stats.h"
 
+#ifndef EPFNOSUPPORT
+/* Some old versions of newlib haven't got this defined in errno.h,
+ * Just use EPROTONOSUPPORT in this case
+ */
+#define EPFNOSUPPORT EPROTONOSUPPORT
+#endif
+
 #define NET_MAX_CONTEXT CONFIG_NET_MAX_CONTEXTS
 
 #if defined(CONFIG_NET_TCP_ACK_TIMEOUT)
@@ -78,8 +85,8 @@ static struct net_context contexts[NET_MAX_CONTEXT];
 static struct k_sem contexts_lock;
 
 static enum net_verdict packet_received(struct net_conn *conn,
-				 struct net_pkt *pkt,
-				 void *user_data);
+					struct net_pkt *pkt,
+					void *user_data);
 
 static void set_appdata_values(struct net_pkt *pkt, enum net_ip_protocol proto);
 
@@ -626,6 +633,23 @@ int net_context_unref(struct net_context *context)
 
 #if defined(CONFIG_NET_TCP)
 	if (context->tcp) {
+		int i;
+
+		/* Clear the backlog for this TCP context. */
+		for (i = 0; i < CONFIG_NET_TCP_BACKLOG_SIZE; i++) {
+			if (tcp_backlog[i].tcp != context->tcp) {
+				continue;
+			}
+
+			if (k_delayed_work_cancel(&tcp_backlog[i].ack_timer) ==
+							    -EINPROGRESS) {
+				tcp_backlog[i].cancelled = true;
+			} else {
+				memset(&tcp_backlog[i], 0,
+				       sizeof(struct tcp_backlog_entry));
+			}
+		}
+
 		net_tcp_release(context->tcp);
 		context->tcp = NULL;
 	}

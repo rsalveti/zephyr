@@ -54,19 +54,6 @@
 
 #define ENGINE_UPDATE_INTERVAL 500
 
-/* LWM2M / CoAP Content-Formats */
-#define LWM2M_FORMAT_PLAIN_TEXT		0
-#define LWM2M_FORMAT_APP_LINK_FORMAT	40
-#define LWM2M_FORMAT_APP_OCTET_STREAM	42
-#define LWM2M_FORMAT_APP_EXI		47
-#define LWM2M_FORMAT_APP_JSON		50
-#define LWM2M_FORMAT_OMA_PLAIN_TEXT	1541
-#define LWM2M_FORMAT_OMA_OLD_TLV	1542
-#define LWM2M_FORMAT_OMA_OLD_JSON	1543
-#define LWM2M_FORMAT_OMA_OLD_OPAQUE	1544
-#define LWM2M_FORMAT_OMA_TLV		11542
-#define LWM2M_FORMAT_OMA_JSON		11543
-
 #define DISCOVER_PREFACE	"</.well-known/core>;ct=40"
 
 #define BUF_ALLOC_TIMEOUT K_SECONDS(1)
@@ -82,6 +69,7 @@ struct observe_node {
 	u32_t min_period_sec;
 	u32_t max_period_sec;
 	u32_t counter;
+	u16_t format;
 	bool used;
 	u8_t  tkl;
 };
@@ -126,6 +114,7 @@ char *lwm2m_sprint_ip_addr(const struct sockaddr *addr)
 	return NULL;
 }
 
+#if CONFIG_SYS_LOG_LWM2M_LEVEL > 3
 static char *sprint_token(const u8_t *token, u8_t tkl)
 {
 	int i;
@@ -138,6 +127,7 @@ static char *sprint_token(const u8_t *token, u8_t tkl)
 	buf[pos] = '\0';
 	return buf;
 }
+#endif
 
 /* observer functions */
 
@@ -174,7 +164,8 @@ int lwm2m_notify_observer_path(struct lwm2m_obj_path *path)
 static int engine_add_observer(struct net_context *net_ctx,
 			       struct sockaddr *addr,
 			       const u8_t *token, u8_t tkl,
-			       struct lwm2m_obj_path *path)
+			       struct lwm2m_obj_path *path,
+			       u16_t format)
 {
 	struct observe_node *obs;
 	int i;
@@ -226,6 +217,7 @@ static int engine_add_observer(struct net_context *net_ctx,
 	/* TODO: use server object instance or WRITE_ATTR values */
 	observe_node_data[i].min_period_sec = 10;
 	observe_node_data[i].max_period_sec = 60;
+	observe_node_data[i].format = format;
 	observe_node_data[i].counter = 1;
 	sys_slist_append(&engine_observer_list,
 			 &observe_node_data[i].node);
@@ -261,7 +253,7 @@ static int engine_remove_observer(const u8_t *token, u8_t tkl)
 
 	sys_slist_remove(&engine_observer_list, NULL, &found_obj->node);
 
-	SYS_LOG_DBG("oberver '%s' removed", sprint_token(token, tkl));
+	SYS_LOG_DBG("observer '%s' removed", sprint_token(token, tkl));
 
 	return 0;
 }
@@ -657,7 +649,7 @@ static u16_t select_writer(struct lwm2m_output_context *out, u16_t accept)
 		SYS_LOG_ERR("Unknown Accept type %u, using LWM2M plain text",
 			    accept);
 		out->writer = &plain_text_writer;
-		accept = LWM2M_FORMAT_OMA_PLAIN_TEXT;
+		accept = LWM2M_FORMAT_PLAIN_TEXT;
 		break;
 
 	}
@@ -669,6 +661,7 @@ static u16_t select_reader(struct lwm2m_input_context *in, u16_t format)
 {
 	switch (format) {
 
+	case LWM2M_FORMAT_PLAIN_TEXT:
 	case LWM2M_FORMAT_OMA_PLAIN_TEXT:
 		in->reader = &plain_text_reader;
 		break;
@@ -682,7 +675,7 @@ static u16_t select_reader(struct lwm2m_input_context *in, u16_t format)
 		SYS_LOG_ERR("Unknown content type %u, using LWM2M plain text",
 			    format);
 		in->reader = &plain_text_reader;
-		format = LWM2M_FORMAT_OMA_PLAIN_TEXT;
+		format = LWM2M_FORMAT_PLAIN_TEXT;
 		break;
 
 	}
@@ -1971,7 +1964,7 @@ static int handle_request(struct zoap_packet *request,
 		format = zoap_option_value_to_int(&options[0]);
 	} else {
 		SYS_LOG_DBG("No content-format given. Assume text plain.");
-		format = LWM2M_FORMAT_OMA_PLAIN_TEXT;
+		format = LWM2M_FORMAT_PLAIN_TEXT;
 	}
 
 	/* read Accept */
@@ -1979,9 +1972,8 @@ static int handle_request(struct zoap_packet *request,
 	if (r > 0) {
 		accept = zoap_option_value_to_int(&options[0]);
 	} else {
-		SYS_LOG_DBG("No Accept header: use same as content-format(%d)",
-			    format);
-		accept = format;
+		SYS_LOG_DBG("No accept option given. Assume OMA TLV.");
+		accept = LWM2M_FORMAT_OMA_TLV;
 	}
 
 	/* TODO: Handle bootstrap deleted -- re-add when DTLS support ready */
@@ -2063,7 +2055,7 @@ static int handle_request(struct zoap_packet *request,
 
 				r = engine_add_observer(
 					net_pkt_context(in.in_zpkt->pkt),
-					from_addr, token, tkl, &path);
+					from_addr, token, tkl, &path, accept);
 				if (r < 0) {
 					SYS_LOG_ERR("add OBSERVE error: %d", r);
 				}
@@ -2145,9 +2137,16 @@ static int handle_request(struct zoap_packet *request,
 	return r;
 }
 
+int lwm2m_udp_sendto(struct net_pkt *pkt, const struct sockaddr *dst_addr)
+{
+	return net_context_sendto(pkt, dst_addr, NET_SOCKADDR_MAX_SIZE,
+				  NULL, K_NO_WAIT, NULL, NULL);
+}
+
 void lwm2m_udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 		       struct zoap_pending *zpendings, int num_zpendings,
 		       struct zoap_reply *zreplies, int num_zreplies,
+		       bool handle_separate_response,
 		       int (*udp_request_handler)(struct zoap_packet *,
 						  struct zoap_packet *,
 						  struct sockaddr *))
@@ -2240,10 +2239,7 @@ void lwm2m_udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 			if (r < 0) {
 				SYS_LOG_ERR("Request handler error: %d", r);
 			} else {
-				r = net_context_sendto(pkt2, &from_addr,
-						       NET_SOCKADDR_MAX_SIZE,
-						       NULL, K_NO_WAIT, NULL,
-						       NULL);
+				r = lwm2m_udp_sendto(pkt2, &from_addr);
 				if (r < 0) {
 					SYS_LOG_ERR("Err sending response: %d",
 						    r);
@@ -2253,8 +2249,23 @@ void lwm2m_udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 			SYS_LOG_ERR("No handler for response");
 		}
 	} else {
-		SYS_LOG_DBG("reply handled reply:%p", reply);
-		zoap_reply_clear(reply);
+		/*
+		 * Separate response is composed of 2 messages, empty ACK with
+		 * no token and an additional message with a matching token id
+		 * (based on the token used by the CON request).
+		 *
+		 * Since the ACK received by the notify CON messages are also
+		 * empty with no token (consequence of always using the same
+		 * token id for all notifications), we have to use an
+		 * additional flag to decide when to clear the reply callback.
+		 */
+		if (handle_separate_response && !tkl &&
+			zoap_header_get_type(&response) == ZOAP_TYPE_ACK) {
+			SYS_LOG_DBG("separated response, not removing reply");
+		} else {
+			SYS_LOG_DBG("reply %p handled and removed", reply);
+			zoap_reply_clear(reply);
+		}
 	}
 
 cleanup:
@@ -2267,7 +2278,7 @@ static void udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 			int status, void *user_data)
 {
 	lwm2m_udp_receive(ctx, pkt, pendings, NUM_PENDINGS,
-			  replies, NUM_REPLIES, handle_request);
+			  replies, NUM_REPLIES, false, handle_request);
 }
 
 static void retransmit_request(struct k_work *work)
@@ -2280,9 +2291,7 @@ static void retransmit_request(struct k_work *work)
 		return;
 	}
 
-	r = net_context_sendto(pending->pkt, &pending->addr,
-			       NET_SOCKADDR_MAX_SIZE,
-			       NULL, K_NO_WAIT, NULL, NULL);
+	r = lwm2m_udp_sendto(pending->pkt, &pending->addr);
 	if (r < 0) {
 		return;
 	}
@@ -2384,14 +2393,12 @@ static int generate_notify_message(struct observe_node *obs,
 		goto cleanup;
 	}
 
-	/* TODO: save the accept-format from original request */
-
 	/* set the output writer */
-	select_writer(&out, LWM2M_FORMAT_OMA_TLV);
+	select_writer(&out, obs->format);
 
 	/* set response content-format */
 	ret = zoap_add_option_int(out.out_zpkt, ZOAP_OPTION_CONTENT_FORMAT,
-				  LWM2M_FORMAT_OMA_TLV);
+				  obs->format);
 	if (ret > 0) {
 		SYS_LOG_ERR("error setting content-format (err:%d)", ret);
 		goto cleanup;
@@ -2427,8 +2434,7 @@ static int generate_notify_message(struct observe_node *obs,
 	zoap_reply_init(reply, &request);
 	reply->reply = notify_message_reply_cb;
 
-	ret = net_context_sendto(pkt, &obs->addr, NET_SOCKADDR_MAX_SIZE,
-				 NULL, 0, NULL, NULL);
+	ret = lwm2m_udp_sendto(pkt, &obs->addr);
 	if (ret < 0) {
 		SYS_LOG_ERR("Error sending LWM2M packet (err:%d).", ret);
 		goto cleanup;

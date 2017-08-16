@@ -17,7 +17,7 @@ mapping:
     type: str
   "type":
     type: str
-    enum: [ 'mcu', 'qemu' ]
+    enum: [ 'mcu', 'qemu', 'sim' ]
   "arch":
     type: str
   "toolchain":
@@ -25,7 +25,7 @@ mapping:
     seq:
       -
         type: str
-        enum: [ 'gccarmemb', 'issm', 'xcc', 'zephyr' ]
+        enum: [ 'gccarmemb', 'issm', 'xcc', 'zephyr', 'espressif']
   "ram":
     type: int
   "flash":

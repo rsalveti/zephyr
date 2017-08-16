@@ -47,7 +47,7 @@ firmware_udp_receive(struct net_context *ctx, struct net_pkt *pkt, int status,
 		     void *user_data)
 {
 	lwm2m_udp_receive(ctx, pkt, pendings, NUM_PENDINGS,
-			  replies, NUM_REPLIES, NULL);
+			  replies, NUM_REPLIES, true, NULL);
 }
 
 static void retransmit_request(struct k_work *work)
@@ -60,9 +60,7 @@ static void retransmit_request(struct k_work *work)
 		return;
 	}
 
-	r = net_context_sendto(pending->pkt, &pending->addr,
-			       NET_SOCKADDR_MAX_SIZE,
-			       NULL, K_NO_WAIT, NULL, NULL);
+	r = lwm2m_udp_sendto(pending->pkt, &pending->addr);
 	if (r < 0) {
 		return;
 	}
@@ -129,8 +127,7 @@ static int transfer_request(struct zoap_block_context *ctx,
 	}
 
 	/* send request */
-	ret = net_context_sendto(pkt, &firmware_addr, NET_SOCKADDR_MAX_SIZE,
-				 NULL, 0, NULL, NULL);
+	ret = lwm2m_udp_sendto(pkt, &firmware_addr);
 	if (ret < 0) {
 		SYS_LOG_ERR("Error sending LWM2M packet (err:%d).",
 			    ret);
@@ -196,6 +193,28 @@ do_firmware_transfer_reply_cb(const struct zoap_packet *response,
 	}
 
 	return ret;
+}
+
+static enum zoap_block_size default_block_size(void)
+{
+	switch (CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_BLOCK_SIZE) {
+	case 16:
+		return ZOAP_BLOCK_16;
+	case 32:
+		return ZOAP_BLOCK_32;
+	case 64:
+		return ZOAP_BLOCK_64;
+	case 128:
+		return ZOAP_BLOCK_128;
+	case 256:
+		return ZOAP_BLOCK_256;
+	case 512:
+		return ZOAP_BLOCK_512;
+	case 1024:
+		return ZOAP_BLOCK_1024;
+	}
+
+	return ZOAP_BLOCK_256;
 }
 
 static void firmware_transfer(struct k_work *work)
@@ -279,11 +298,7 @@ static void firmware_transfer(struct k_work *work)
 	}
 
 	/* reset block transfer context */
-#if defined(CONFIG_NET_L2_BLUETOOTH)
-	zoap_block_transfer_init(&firmware_block_ctx, ZOAP_BLOCK_64, 0);
-#else
-	zoap_block_transfer_init(&firmware_block_ctx, ZOAP_BLOCK_256, 0);
-#endif
+	zoap_block_transfer_init(&firmware_block_ctx, default_block_size(), 0);
 
 	transfer_request(&firmware_block_ctx, NULL, 0,
 			 do_firmware_transfer_reply_cb);

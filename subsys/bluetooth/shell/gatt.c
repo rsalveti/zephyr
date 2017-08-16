@@ -27,7 +27,7 @@
 
 #define CHAR_SIZE_MAX           512
 
-#if defined(CONFIG_BLUETOOTH_GATT_CLIENT)
+#if defined(CONFIG_BT_GATT_CLIENT)
 static void exchange_func(struct bt_conn *conn, u8_t err,
 			  struct bt_gatt_exchange_params *params)
 {
@@ -235,6 +235,7 @@ int cmd_gatt_read(int argc, char *argv[])
 
 	read_params.handle_count = 1;
 	read_params.single.handle = strtoul(argv[1], NULL, 16);
+	read_params.single.offset = 0;
 
 	if (argc > 2) {
 		read_params.single.offset = strtoul(argv[2], NULL, 16);
@@ -481,7 +482,7 @@ int cmd_gatt_unsubscribe(int argc, char *argv[])
 
 	return 0;
 }
-#endif /* CONFIG_BLUETOOTH_GATT_CLIENT */
+#endif /* CONFIG_BT_GATT_CLIENT */
 
 static u8_t print_attr(const struct bt_gatt_attr *attr, void *user_data)
 {

@@ -108,6 +108,12 @@ static bool net_if_tx(struct net_if *iface)
 #if defined(CONFIG_NET_STATISTICS)
 		pkt_len = net_pkt_get_len(pkt);
 #endif
+
+		if (IS_ENABLED(CONFIG_NET_TCP)) {
+			net_pkt_set_sent(pkt, true);
+			net_pkt_set_queued(pkt, false);
+		}
+
 		status = api->send(iface, pkt);
 	} else {
 		/* Drop packet if interface is not up */
@@ -116,6 +122,10 @@ static bool net_if_tx(struct net_if *iface)
 	}
 
 	if (status < 0) {
+		if (IS_ENABLED(CONFIG_NET_TCP)) {
+			net_pkt_set_sent(pkt, false);
+		}
+
 		net_pkt_unref(pkt);
 	} else {
 		net_stats_update_bytes_sent(pkt_len);
@@ -334,6 +344,19 @@ struct net_if *net_if_get_default(void)
 	}
 
 	return __net_if_start;
+}
+
+struct net_if *net_if_get_first_by_type(const struct net_l2 *l2)
+{
+	struct net_if *iface;
+
+	for (iface = __net_if_start; iface != __net_if_end; iface++) {
+		if (iface->l2 == l2) {
+			return iface;
+		}
+	}
+
+	return NULL;
 }
 
 #if defined(CONFIG_NET_IPV6)

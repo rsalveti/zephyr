@@ -39,6 +39,10 @@
 #include <net/net_app.h>
 #endif
 
+#if defined(CONFIG_NET_RPL)
+#include "rpl.h"
+#endif
+
 #include "net_shell.h"
 #include "net_stats.h"
 
@@ -87,6 +91,65 @@ static inline const char *addrstate2str(enum net_addr_state addr_state)
 	return "<invalid state>";
 }
 
+static const char *iface2str(struct net_if *iface, const char **extra)
+{
+#ifdef CONFIG_NET_L2_IEEE802154
+	if (iface->l2 == &NET_L2_GET_NAME(IEEE802154)) {
+		if (extra) {
+			*extra = "=============";
+		}
+
+		return "IEEE 802.15.4";
+	}
+#endif
+
+#ifdef CONFIG_NET_L2_ETHERNET
+	if (iface->l2 == &NET_L2_GET_NAME(ETHERNET)) {
+		if (extra) {
+			*extra = "========";
+		}
+
+		return "Ethernet";
+	}
+#endif
+
+#ifdef CONFIG_NET_L2_DUMMY
+	if (iface->l2 == &NET_L2_GET_NAME(DUMMY)) {
+		if (extra) {
+			*extra = "=====";
+		}
+
+		return "Dummy";
+	}
+#endif
+
+#ifdef CONFIG_NET_L2_BT
+	if (iface->l2 == &NET_L2_GET_NAME(BLUETOOTH)) {
+		if (extra) {
+			*extra = "=========";
+		}
+
+		return "Bluetooth";
+	}
+#endif
+
+#ifdef CONFIG_NET_L2_OFFLOAD
+	if (iface->l2 == &NET_L2_GET_NAME(OFFLOAD_IP)) {
+		if (extra) {
+			*extra = "==========";
+		}
+
+		return "IP Offload";
+	}
+#endif
+
+	if (extra) {
+		*extra = "==============";
+	}
+
+	return "<unknown type>";
+}
+
 static void iface_cb(struct net_if *iface, void *user_data)
 {
 #if defined(CONFIG_NET_IPV6)
@@ -95,12 +158,13 @@ static void iface_cb(struct net_if *iface, void *user_data)
 #endif
 	struct net_if_addr *unicast;
 	struct net_if_mcast_addr *mcast;
+	const char *extra;
 	int i, count;
 
 	ARG_UNUSED(user_data);
 
-	printk("Interface %p\n", iface);
-	printk("====================\n");
+	printk("Interface %p (%s)\n", iface, iface2str(iface, &extra));
+	printk("=======================%s\n", extra);
 
 	if (!net_if_is_up(iface)) {
 		printk("Interface is down.\n");
@@ -265,16 +329,11 @@ static void route_cb(struct net_route_entry *entry, void *user_data)
 		return;
 	}
 
-	printk("IPv6 Route %p for interface %p\n", entry, iface);
-	printk("==============================================\n");
-
 	printk("IPv6 prefix : %s/%d\n",
 	       net_sprint_ipv6_addr(&entry->addr),
 	       entry->prefix_len);
 
 	count = 0;
-
-	printk("Next hops   :\n");
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&entry->nexthop, nexthop_route, node) {
 		struct net_linkaddr_storage *lladdr;
@@ -305,7 +364,13 @@ static void route_cb(struct net_route_entry *entry, void *user_data)
 
 static void iface_per_route_cb(struct net_if *iface, void *user_data)
 {
+	const char *extra;
+
 	ARG_UNUSED(user_data);
+
+	printk("IPv6 routes for interface %p (%s)\n", iface,
+	       iface2str(iface, &extra));
+	printk("=======================================%s\n", extra);
 
 	net_route_foreach(route_cb, iface);
 }
@@ -316,13 +381,16 @@ static void route_mcast_cb(struct net_route_entry_mcast *entry,
 			   void *user_data)
 {
 	struct net_if *iface = user_data;
+	const char *extra;
 
 	if (entry->iface != iface) {
 		return;
 	}
 
-	printk("IPv6 multicast route %p for interface %p\n", entry, iface);
-	printk("========================================================\n");
+	printk("IPv6 multicast route %p for interface %p (%s)\n", entry,
+	       iface, iface2str(iface, &extra));
+	printk("==========================================================="
+	       "%s\n", extra);
 
 	printk("IPv6 group : %s\n", net_sprint_ipv6_addr(&entry->group));
 	printk("Lifetime   : %u\n", entry->lifetime);
@@ -589,6 +657,57 @@ static void tcp_cb(struct net_tcp *tcp, void *user_data)
 
 	(*count)++;
 }
+
+#if defined(CONFIG_NET_DEBUG_TCP)
+static void tcp_sent_list_cb(struct net_tcp *tcp, void *user_data)
+{
+	int *printed = user_data;
+	struct net_pkt *pkt;
+	struct net_pkt *tmp;
+
+	if (sys_slist_is_empty(&tcp->sent_list)) {
+		return;
+	}
+
+	if (!*printed) {
+		printk("\nTCP packets waiting ACK:\n");
+		printk("TCP             net_pkt[ref/totlen]->net_buf[ref/len]...\n");
+	}
+
+	printk("%p      ", tcp);
+
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&tcp->sent_list, pkt, tmp,
+					  sent_list) {
+		struct net_buf *frag = pkt->frags;
+
+		if (!*printed) {
+			printk("%p[%d/%zd]", pkt, pkt->ref,
+			       net_pkt_get_len(pkt));
+			*printed = true;
+		} else {
+			printk("                %p[%d/%zd]", pkt, pkt->ref,
+			       net_pkt_get_len(pkt));
+		}
+
+		if (frag) {
+			printk("->");
+		}
+
+		while (frag) {
+			printk("%p[%d/%d]", frag, frag->ref, frag->len);
+
+			frag = frag->frags;
+			if (frag) {
+				printk("->");
+			}
+		}
+
+		printk("\n");
+	}
+
+	*printed = true;
+}
+#endif /* CONFIG_NET_DEBUG_TCP */
 #endif
 
 #if defined(CONFIG_NET_IPV6_FRAGMENT)
@@ -954,6 +1073,12 @@ int net_shell_cmd_conn(int argc, char *argv[])
 
 	if (count == 0) {
 		printk("No TCP connections\n");
+	} else {
+#if defined(CONFIG_NET_DEBUG_TCP)
+		/* Print information about pending packets */
+		count = 0;
+		net_tcp_foreach(tcp_sent_list_cb, &count);
+#endif /* CONFIG_NET_DEBUG_TCP */
 	}
 #endif
 
@@ -1298,11 +1423,11 @@ static void context_info(struct net_context *context, void *user_data)
 		}
 
 #if defined(CONFIG_NET_DEBUG_NET_PKT)
-		printk("ETX\t%zu\t%u\t%u\t%p\n",
-		       slab->num_blocks * slab->block_size,
-		       slab->num_blocks, k_mem_slab_num_free_get(slab), slab);
+		printk("%p\t%zu\t%u\t%u\tETX\n",
+		       slab, slab->num_blocks * slab->block_size,
+		       slab->num_blocks, k_mem_slab_num_free_get(slab));
 #else
-		printk("ETX     \t%d\t%p\n", slab->num_blocks, slab);
+		printk("%p\t%d\tETX\n", slab, slab->num_blocks);
 #endif
 		info->are_external_pools = true;
 		info->tx_slabs[info->pos] = slab;
@@ -1316,11 +1441,11 @@ static void context_info(struct net_context *context, void *user_data)
 		}
 
 #if defined(CONFIG_NET_DEBUG_NET_PKT)
-		printk("EDATA (%s)\t%d\t%d\t%d\t%p\n",
-		       pool->name, pool->pool_size, pool->buf_count,
-		       pool->avail_count, pool);
+		printk("%p\t%d\t%d\t%d\tEDATA (%s)\n",
+		       pool, pool->pool_size, pool->buf_count,
+		       pool->avail_count, pool->name);
 #else
-		printk("EDATA   \t%d\t%p\n", pool->buf_count, pool);
+		printk("%p\t%d\tEDATA\n", pool, pool->buf_count);
 #endif
 		info->are_external_pools = true;
 		info->data_pools[info->pos] = pool;
@@ -1345,30 +1470,30 @@ int net_shell_cmd_mem(int argc, char *argv[])
 	printk("Network buffer pools:\n");
 
 #if defined(CONFIG_NET_DEBUG_NET_PKT)
-	printk("Name\t\t\tSize\tCount\tAvail\tAddress\n");
+	printk("Address\t\tSize\tCount\tAvail\tName\n");
 
-	printk("RX\t\t%zu\t%d\t%u\t%p\n",
-	       rx->num_blocks * rx->block_size,
-	       rx->num_blocks, k_mem_slab_num_free_get(rx), rx);
+	printk("%p\t%zu\t%d\t%u\tRX\n",
+	       rx, rx->num_blocks * rx->block_size,
+	       rx->num_blocks, k_mem_slab_num_free_get(rx));
 
-	printk("TX\t\t%zu\t%d\t%u\t%p\n",
-	       tx->num_blocks * tx->block_size,
-	       tx->num_blocks, k_mem_slab_num_free_get(tx), tx);
+	printk("%p\t%zu\t%d\t%u\tTX\n",
+	       tx, tx->num_blocks * tx->block_size,
+	       tx->num_blocks, k_mem_slab_num_free_get(tx));
 
-	printk("RX DATA (%s)\t%d\t%d\t%d\t%p\n",
-	       rx_data->name, rx_data->pool_size, rx_data->buf_count,
-	       rx_data->avail_count, rx_data);
+	printk("%p\t%d\t%d\t%d\tRX DATA (%s)\n",
+	       rx_data, rx_data->pool_size, rx_data->buf_count,
+	       rx_data->avail_count, rx_data->name);
 
-	printk("TX DATA (%s)\t%d\t%d\t%d\t%p\n",
-	       tx_data->name, tx_data->pool_size, tx_data->buf_count,
-	       tx_data->avail_count, tx_data);
+	printk("%p\t%d\t%d\t%d\tTX DATA (%s)\n",
+	       tx_data, tx_data->pool_size, tx_data->buf_count,
+	       tx_data->avail_count, tx_data->name);
 #else
-	printk("Name    \tCount\tAddress\n");
+	printk("Address\t\tCount\tName\n");
 
-	printk("RX      \t%d\t%p\n", rx->num_blocks, rx);
-	printk("TX      \t%d\t%p\n", tx->num_blocks, tx);
-	printk("RX DATA \t%d\t%p\n", rx_data->buf_count, rx_data);
-	printk("TX DATA \t%d\t%p\n", tx_data->buf_count, tx_data);
+	printk("%p\t%d\tRX\n", rx, rx->num_blocks);
+	printk("%p\t%d\tTX\n", tx, tx->num_blocks);
+	printk("%p\t%d\tRX DATA\n", rx_data, rx_data->buf_count);
+	printk("%p\t%d\tTX DATA\n", tx_data, tx_data->buf_count);
 #endif /* CONFIG_NET_DEBUG_NET_PKT */
 
 	if (IS_ENABLED(CONFIG_NET_CONTEXT_NET_PKT_POOL)) {
@@ -1391,8 +1516,14 @@ static void nbr_cb(struct net_nbr *nbr, void *user_data)
 	int *count = user_data;
 
 	if (*count == 0) {
+		char *padding = "";
+
+		if (net_nbr_get_lladdr(nbr->idx)->len == 8) {
+			padding = "      ";
+		}
+
 		printk("     Neighbor   Flags   Interface  State\t"
-		       "Remain\tLink              Address\n");
+		       "Remain\tLink              %sAddress\n", padding);
 	}
 
 	(*count)++;
@@ -1643,6 +1774,199 @@ int net_shell_cmd_route(int argc, char *argv[])
 
 #if defined(CONFIG_NET_ROUTE_MCAST)
 	net_if_foreach(iface_per_mcast_route_cb, NULL);
+#endif
+
+	return 0;
+}
+
+#if defined(CONFIG_NET_RPL)
+static int power(int base, unsigned int exp)
+{
+	int i, result = 1;
+
+	for (i = 0; i < exp; i++) {
+		result *= base;
+	}
+
+	return result;
+}
+
+static void rpl_parent(struct net_rpl_parent *parent, void *user_data)
+{
+	int *count = user_data;
+
+	if (*count == 0) {
+		printk("      Parent     Last TX   Rank  DTSN  Flags DAG\t\t\t"
+		       "Address\n");
+	}
+
+	(*count)++;
+
+	if (parent->dag) {
+		struct net_ipv6_nbr_data *data;
+		char addr[NET_IPV6_ADDR_LEN];
+
+		data = net_rpl_get_ipv6_nbr_data(parent);
+		if (data) {
+			snprintk(addr, sizeof(addr), "%s",
+				 net_sprint_ipv6_addr(&data->addr));
+		} else {
+			snprintk(addr, sizeof(addr), "<unknown>");
+		}
+
+		printk("[%2d]%s %p %7d  %5d   %3d  0x%02x  %s\t%s\n",
+		       *count,
+		       parent->dag->preferred_parent == parent ? "*" : " ",
+		       parent, parent->last_tx_time, parent->rank,
+		       parent->dtsn, parent->flags,
+		       net_sprint_ipv6_addr(&parent->dag->dag_id),
+		       addr);
+	}
+}
+
+#endif /* CONFIG_NET_RPL */
+
+int net_shell_cmd_rpl(int argc, char *argv[])
+{
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+#if defined(CONFIG_NET_RPL)
+	struct net_rpl_instance *instance;
+	enum net_rpl_mode mode;
+	int i, count;
+
+	mode = net_rpl_get_mode();
+	printk("RPL Configuration\n");
+	printk("=================\n");
+	printk("RPL mode                     : %s\n",
+	       mode == NET_RPL_MODE_MESH ? "mesh" :
+	       (mode == NET_RPL_MODE_FEATHER ? "feather" :
+		(mode == NET_RPL_MODE_LEAF ? "leaf" : "<unknown>")));
+	printk("Used objective function      : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_MRHOF) ? "MRHOF" :
+	       (IS_ENABLED(CONFIG_NET_RPL_OF0) ? "OF0" : "<unknown>"));
+	printk("Used routing metric          : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_MC_NONE) ? "none" :
+	       (IS_ENABLED(CONFIG_NET_RPL_MC_ETX) ? "estimated num of TX" :
+		(IS_ENABLED(CONFIG_NET_RPL_MC_ENERGY) ? "energy based" :
+		 "<unknown>")));
+	printk("Mode of operation (MOP)      : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_MOP2) ? "Storing, no mcast (MOP2)" :
+	       (IS_ENABLED(CONFIG_NET_RPL_MOP3) ? "Storing (MOP3)" :
+		"<unknown>"));
+	printk("Send probes to nodes         : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_PROBING) ? "enabled" : "disabled");
+	printk("Max instances                : %d\n",
+	       CONFIG_NET_RPL_MAX_INSTANCES);
+	printk("Max DAG / instance           : %d\n",
+	       CONFIG_NET_RPL_MAX_DAG_PER_INSTANCE);
+
+	printk("Min hop rank increment       : %d\n",
+	       CONFIG_NET_RPL_MIN_HOP_RANK_INC);
+	printk("Initial link metric          : %d\n",
+	       CONFIG_NET_RPL_INIT_LINK_METRIC);
+	printk("RPL preference value         : %d\n",
+	       CONFIG_NET_RPL_PREFERENCE);
+	printk("DAG grounded by default      : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_GROUNDED) ? "yes" : "no");
+	printk("Default instance id          : %d (0x%02x)\n",
+	       CONFIG_NET_RPL_DEFAULT_INSTANCE,
+	       CONFIG_NET_RPL_DEFAULT_INSTANCE);
+	printk("Insert Hop-by-hop option     : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_INSERT_HBH_OPTION) ? "yes" : "no");
+
+	printk("Specify DAG when sending DAO : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_DAO_SPECIFY_DAG) ? "yes" : "no");
+	printk("DIO min interval             : %d (%d ms)\n",
+	       CONFIG_NET_RPL_DIO_INTERVAL_MIN,
+	       power(2, CONFIG_NET_RPL_DIO_INTERVAL_MIN));
+	printk("DIO doublings interval       : %d\n",
+	       CONFIG_NET_RPL_DIO_INTERVAL_DOUBLINGS);
+	printk("DIO redundancy value         : %d\n",
+	       CONFIG_NET_RPL_DIO_REDUNDANCY);
+
+	printk("DAO sending timer value      : %d sec\n",
+	       CONFIG_NET_RPL_DAO_TIMER);
+	printk("DAO max retransmissions      : %d\n",
+	       CONFIG_NET_RPL_DAO_MAX_RETRANSMISSIONS);
+	printk("Node expecting DAO ack       : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_DAO_ACK) ? "yes" : "no");
+
+	printk("Send DIS periodically        : %s\n",
+	       IS_ENABLED(CONFIG_NET_RPL_DIS_SEND) ? "yes" : "no");
+#if defined(CONFIG_NET_RPL_DIS_SEND)
+	printk("DIS interval                 : %d sec\n",
+	       CONFIG_NET_RPL_DIS_INTERVAL);
+#endif
+
+	printk("Default route lifetime unit  : %d sec\n",
+	       CONFIG_NET_RPL_DEFAULT_LIFETIME_UNIT);
+	printk("Default route lifetime       : %d\n",
+	       CONFIG_NET_RPL_DEFAULT_LIFETIME);
+#if defined(CONFIG_NET_RPL_MOP3)
+	printk("Multicast route lifetime     : %d\n",
+	       CONFIG_NET_RPL_MCAST_LIFETIME);
+#endif
+	printk("\nRuntime status\n");
+	printk("==============\n");
+
+	instance = net_rpl_get_default_instance();
+	if (!instance) {
+		printk("No default RPL instance found.\n");
+		return 0;
+	}
+
+	printk("Default instance (id %d) : %p (%s)\n", instance->instance_id,
+	       instance, instance->is_used ? "active" : "disabled");
+
+	if (instance->default_route) {
+		printk("Default route   : %s\n",
+		       net_sprint_ipv6_addr(
+			       &instance->default_route->address.in6_addr));
+	}
+
+#if defined(CONFIG_NET_STATISTICS_RPL)
+	printk("DIO statistics  : intervals %d sent %d recv %d\n",
+	       instance->dio_intervals, instance->dio_send_pkt,
+	       instance->dio_recv_pkt);
+#endif /* CONFIG_NET_STATISTICS_RPL */
+
+	printk("Instance DAGs   :\n");
+	for (i = 0, count = 0; i < CONFIG_NET_RPL_MAX_DAG_PER_INSTANCE; i++) {
+		char prefix[NET_IPV6_ADDR_LEN];
+
+		if (!instance->dags[i].is_used) {
+			continue;
+		}
+
+		snprintk(prefix, sizeof(prefix), "%s",
+			 net_sprint_ipv6_addr(
+				 &instance->dags[i].prefix_info.prefix));
+
+		printk("[%2d]%s %s prefix %s/%d rank %d/%d ver %d flags %c%c "
+		       "parent %p\n",
+		       ++count,
+		       &instance->dags[i] == instance->current_dag ? "*" : " ",
+		       net_sprint_ipv6_addr(&instance->dags[i].dag_id),
+		       prefix, instance->dags[i].prefix_info.length,
+		       instance->dags[i].rank, instance->dags[i].min_rank,
+		       instance->dags[i].version,
+		       instance->dags[i].is_grounded ? 'G' : 'g',
+		       instance->dags[i].is_joined ? 'J' : 'j',
+		       instance->dags[i].preferred_parent);
+	}
+	printk("\n");
+
+	count = 0;
+	i = net_rpl_foreach_parent(rpl_parent, &count);
+	if (i == 0) {
+		printk("No parents found.\n");
+	}
+
+	printk("\n");
+#else
+	printk("RPL not enabled, set CONFIG_NET_RPL to enable it.\n");
 #endif
 
 	return 0;
@@ -1939,7 +2263,8 @@ int net_shell_cmd_tcp(int argc, char *argv[])
 			}
 
 			ret = net_pkt_append_all(pkt, strlen(argv[arg]),
-					      argv[arg], TCP_TIMEOUT);
+						 (u8_t *)argv[arg],
+						 TCP_TIMEOUT);
 			if (!ret) {
 				printk("Cannot build msg (out of pkts)\n");
 				net_pkt_unref(pkt);
@@ -2018,6 +2343,7 @@ static struct shell_cmd net_commands[] = {
 		"nbr rm <IPv6 address>\n\tRemove neighbor from cache" },
 	{ "ping", net_shell_cmd_ping, "<host>\n\tPing a network host" },
 	{ "route", net_shell_cmd_route, "\n\tShow network route" },
+	{ "rpl", net_shell_cmd_rpl, "\n\tShow RPL mesh routing status" },
 	{ "stacks", net_shell_cmd_stacks,
 		"\n\tShow network stacks information" },
 	{ "stats", net_shell_cmd_stats, "\n\tShow network statistics" },

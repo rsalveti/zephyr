@@ -27,6 +27,7 @@ PROVIDE ( __stack = 0x3ffe3f20 );
 PROVIDE ( uart_tx_one_char = 0x40009200 );
 PROVIDE ( uart_rx_one_char = 0x400092d0 );
 PROVIDE ( uartAttach = 0x40008fd0 );
+PROVIDE ( intr_matrix_set = 0x4000681c );
 
 MEMORY
 {
@@ -36,6 +37,9 @@ MEMORY
   drom0_0_seg(R): org = 0x3F400010, len = 0x800000
   rtc_iram_seg(RWX): org = 0x400C0000, len = 0x2000
   rtc_slow_seg(RW): org = 0x50000000, len = 0x1000
+#ifdef CONFIG_GEN_ISR_TABLES
+  IDT_LIST(RW): org = 0x3ebfe010, len = 0x2000
+#endif
 }
 
 PHDRS
@@ -137,25 +141,26 @@ SECTIONS
     _iram_text_start = ABSOLUTE(.);
     *(.iram1 .iram1.*)
     *(.iram0.literal .iram.literal .iram.text.literal .iram0.text .iram.text)
-    *libhal.a:(.literal .text .literal.* .text.*)
+    *(.literal .text .literal.* .text.*)
     _iram_text_end = ABSOLUTE(.);
   } GROUP_LINK_IN(ROMABLE_REGION)
 
   .dram0.data :
   {
     _data_start = ABSOLUTE(.);
-    KEEP(*(.data))
-    KEEP(*(.data.*))
-    KEEP(*(.gnu.linkonce.d.*))
-    KEEP(*(.data1))
-    KEEP(*(.sdata))
-    KEEP(*(.sdata.*))
-    KEEP(*(.gnu.linkonce.s.*))
-    KEEP(*(.sdata2))
-    KEEP(*(.sdata2.*))
-    KEEP(*(.gnu.linkonce.s2.*))
+    *(.data)
+    *(.data.*)
+    *(.gnu.linkonce.d.*)
+    *(.data1)
+    *(.sdata)
+    *(.sdata.*)
+    *(.gnu.linkonce.s.*)
+    *(.sdata2)
+    *(.sdata2.*)
+    *(.gnu.linkonce.s2.*)
     KEEP(*(.jcr))
     *(.dram1 .dram1.*)
+    KEEP(*(SW_ISR_TABLE))
     _data_end = ABSOLUTE(.);
     . = ALIGN(4);
   } GROUP_LINK_IN(RAMABLE_REGION)
@@ -216,6 +221,18 @@ SECTIONS
     *(COMMON)
     . = ALIGN (8);
     _bss_end = ABSOLUTE(.);
+  } GROUP_LINK_IN(RAMABLE_REGION)
+
+  SECTION_DATA_PROLOGUE(_NOINIT_SECTION_NAME, (NOLOAD),)
+  {
+    . = ALIGN (8);
+    *(.noinit)
+    *(".noinit.*")
+    . = ALIGN (8);
     _heap_start = ABSOLUTE(.);
   } GROUP_LINK_IN(RAMABLE_REGION)
+
+#ifdef CONFIG_GEN_ISR_TABLES
+#include <linker/intlist.ld>
+#endif
 }

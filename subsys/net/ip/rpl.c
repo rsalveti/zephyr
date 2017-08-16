@@ -109,6 +109,7 @@
 
 static struct net_rpl_instance rpl_instances[CONFIG_NET_RPL_MAX_INSTANCES];
 static struct net_rpl_instance *rpl_default_instance;
+static struct net_if *rpl_default_iface;
 static enum net_rpl_mode rpl_mode = NET_RPL_MODE_MESH;
 static net_rpl_join_callback_t rpl_join_callback;
 static u8_t rpl_dao_sequence;
@@ -139,7 +140,7 @@ static void remove_parents(struct net_if *iface,
 			   struct net_rpl_dag *dag,
 			   u16_t minimum_rank);
 
-static void net_rpl_schedule_dao_now(struct net_rpl_instance *instance);
+static inline void net_rpl_schedule_dao_now(struct net_rpl_instance *instance);
 static void net_rpl_local_repair(struct net_if *iface,
 				 struct net_rpl_instance *instance);
 
@@ -193,7 +194,7 @@ void net_rpl_set_mode(enum net_rpl_mode new_mode)
 }
 
 static inline u32_t net_rpl_lifetime(struct net_rpl_instance *instance,
-					u8_t lifetime)
+				     u8_t lifetime)
 {
 	return (u32_t)instance->lifetime_unit * (u32_t)lifetime;
 }
@@ -208,7 +209,7 @@ static void net_rpl_neighbor_table_clear(struct net_nbr_table *table)
 	NET_DBG("Neighbor table %p cleared", table);
 }
 
-NET_NBR_POOL_INIT(net_rpl_neighbor_pool, CONFIG_NET_IPV6_MAX_NEIGHBORS,
+NET_NBR_POOL_INIT(net_rpl_neighbor_pool, CONFIG_NET_RPL_MAX_PARENTS,
 		  sizeof(struct net_rpl_parent),
 		  net_rpl_neighbor_data_remove, 0);
 
@@ -270,7 +271,7 @@ struct net_nbr *net_rpl_get_nbr(struct net_rpl_parent *data)
 {
 	int i;
 
-	for (i = 0; i < CONFIG_NET_IPV6_MAX_NEIGHBORS; i++) {
+	for (i = 0; i < CONFIG_NET_RPL_MAX_PARENTS; i++) {
 		struct net_nbr *nbr = get_nbr(i);
 
 		if (nbr->data == (u8_t *)data) {
@@ -345,7 +346,26 @@ struct in6_addr *net_rpl_get_parent_addr(struct net_if *iface,
 	return net_ipv6_nbr_lookup_by_index(iface, nbr->idx);
 }
 
-#if defined(CONFIG_NET_DEBUG_RPL)
+int net_rpl_foreach_parent(net_rpl_parent_cb_t cb, void *user_data)
+{
+	int i, ret = 0;
+
+	for (i = 0; i < CONFIG_NET_RPL_MAX_PARENTS; i++) {
+		struct net_nbr *nbr = get_nbr(i);
+
+		if (!nbr->ref) {
+			continue;
+		}
+
+		cb(nbr_data(nbr), user_data);
+
+		ret++;
+	}
+
+	return ret;
+}
+
+#if defined(CONFIG_NET_DEBUG_RPL) && (CONFIG_SYS_LOG_NET_LEVEL > 3)
 static void net_rpl_print_neighbors(void)
 {
 	if (rpl_default_instance && rpl_default_instance->current_dag) {
@@ -358,7 +378,7 @@ static void net_rpl_print_neighbors(void)
 		NET_DBG("rank %u DIO interval %u", curr_rank,
 			curr_interval);
 
-		for (i = 0; i < CONFIG_NET_IPV6_MAX_NEIGHBORS; i++) {
+		for (i = 0; i < CONFIG_NET_RPL_MAX_PARENTS; i++) {
 			struct net_nbr *ipv6_nbr, *nbr = get_nbr(i);
 			struct in6_addr *parent_addr;
 
@@ -369,10 +389,10 @@ static void net_rpl_print_neighbors(void)
 			parent = nbr_data(nbr);
 
 			parent_addr =
-				net_rpl_get_parent_addr(net_if_get_default(),
+				net_rpl_get_parent_addr(rpl_default_iface,
 							parent);
 
-			ipv6_nbr = net_ipv6_nbr_lookup(net_if_get_default(),
+			ipv6_nbr = net_ipv6_nbr_lookup(rpl_default_iface,
 						       parent_addr);
 
 			NET_DBG("[%d] nbr %s %5u %5u => %5u %c "
@@ -456,7 +476,7 @@ int net_rpl_dio_send(struct net_if *iface,
 	int ret;
 
 	pkt = net_pkt_get_reserve_tx(net_if_get_ll_reserve(iface, dst),
-				      K_FOREVER);
+				     K_FOREVER);
 	if (!pkt) {
 		return -ENOMEM;
 	}
@@ -492,7 +512,7 @@ int net_rpl_dio_send(struct net_if *iface,
 	net_pkt_append_be16(pkt, 0);
 
 	net_pkt_append_all(pkt, sizeof(struct in6_addr), dag->dag_id.s6_addr,
-		       K_FOREVER);
+			   K_FOREVER);
 
 	if (instance->mc.type != NET_RPL_MC_NONE) {
 		net_rpl_of_update_mc(instance);
@@ -571,12 +591,13 @@ int net_rpl_dio_send(struct net_if *iface,
 	ret = net_send_data(pkt);
 	if (ret >= 0) {
 		if (!dst) {
-			NET_DBG("Sent a multicast DIO with rank %d",
-				instance->current_dag->rank);
+			NET_DBG("Sent a multicast DIO with rank %d (iface %p)",
+				instance->current_dag->rank, iface);
 		} else {
-			NET_DBG("Sent a unicast DIO with rank %d to %s",
+			NET_DBG("Sent a unicast DIO with rank %d to %s "
+				"(iface %p)",
 				instance->current_dag->rank,
-				net_sprint_ipv6_addr(dst));
+				net_sprint_ipv6_addr(dst), iface);
 		}
 
 		net_stats_update_icmp_sent();
@@ -619,12 +640,12 @@ static void dio_timer(struct k_work *work)
 	if (instance->dio_send) {
 		if (instance->dio_redundancy &&
 		    instance->dio_counter < instance->dio_redundancy) {
-			struct net_if *iface;
 			struct in6_addr *addr =
-				net_if_ipv6_get_ll_addr(NET_ADDR_PREFERRED,
-							&iface);
+				net_if_ipv6_get_ll(rpl_default_iface,
+						   NET_ADDR_PREFERRED);
 
-			net_rpl_dio_send(iface, instance, addr, NULL);
+			net_rpl_dio_send(rpl_default_iface, instance, addr,
+					 NULL);
 
 #if defined(CONFIG_NET_STATISTICS_RPL)
 			instance->dio_send_pkt++;
@@ -740,7 +761,7 @@ int net_rpl_dis_send(struct in6_addr *dst, struct net_if *iface)
 	}
 
 	pkt = net_pkt_get_reserve_tx(net_if_get_ll_reserve(iface, dst_addr),
-				      K_FOREVER);
+				     K_FOREVER);
 	if (!pkt) {
 		return -ENOMEM;
 	}
@@ -768,8 +789,9 @@ int net_rpl_dis_send(struct in6_addr *dst, struct net_if *iface)
 
 	ret = net_send_data(pkt);
 	if (ret >= 0) {
-		NET_DBG("Sent a %s DIS to %s", dst ? "unicast" : "multicast",
-			net_sprint_ipv6_addr(dst_addr));
+		NET_DBG("Sent a %s DIS to %s (iface %p)",
+			dst ? "unicast" : "multicast",
+			net_sprint_ipv6_addr(dst_addr), iface);
 
 		net_stats_update_icmp_sent();
 		net_stats_update_rpl_dis_sent();
@@ -871,7 +893,7 @@ static struct net_rpl_parent *get_probing_target(struct net_rpl_dag *dag)
 	 * for NET_RPL_PROBING_EXPIRATION_TIME
 	 */
 	if (!probing_target && (sys_rand32_get() % 2) == 0) {
-		for (i = 0; i < CONFIG_NET_IPV6_MAX_NEIGHBORS; i++) {
+		for (i = 0; i < CONFIG_NET_RPL_MAX_PARENTS; i++) {
 			struct net_nbr *nbr = get_nbr(i);
 
 			parent = nbr_data(nbr);
@@ -892,7 +914,7 @@ static struct net_rpl_parent *get_probing_target(struct net_rpl_dag *dag)
 
 	/* The default probing target is the least recently updated parent */
 	if (!probing_target) {
-		for (i = 0; i < CONFIG_NET_IPV6_MAX_NEIGHBORS; i++) {
+		for (i = 0; i < CONFIG_NET_RPL_MAX_PARENTS; i++) {
 			struct net_nbr *nbr = get_nbr(i);
 
 			parent = nbr_data(nbr);
@@ -1285,7 +1307,6 @@ static void net_rpl_reset_dio_timer(struct net_rpl_instance *instance)
 	net_stats_update_rpl_resets();
 }
 
-static
 struct net_rpl_dag *net_rpl_set_root_with_version(struct net_if *iface,
 						  u8_t instance_id,
 						  struct in6_addr *dag_id,
@@ -1460,7 +1481,7 @@ static void net_rpl_nullify_parent(struct net_if *iface,
 				   struct net_rpl_parent *parent)
 {
 	struct net_rpl_dag *dag = parent->dag;
-#if defined(CONFIG_NET_DEBUG_RPL)
+#if defined(CONFIG_NET_DEBUG_RPL) && (CONFIG_SYS_LOG_NET_LEVEL > 3)
 	struct in6_addr *addr = net_rpl_get_parent_addr(iface, parent);
 #endif
 
@@ -1532,7 +1553,7 @@ static void remove_parents(struct net_if *iface,
 
 	NET_DBG("Removing parents minimum rank %u", minimum_rank);
 
-	for (i = 0; i < CONFIG_NET_IPV6_MAX_NEIGHBORS; i++) {
+	for (i = 0; i < CONFIG_NET_RPL_MAX_PARENTS; i++) {
 		struct net_nbr *nbr = get_nbr(i);
 		struct net_rpl_parent *parent;
 
@@ -1775,7 +1796,7 @@ static struct net_rpl_parent *best_parent(struct net_if *iface,
 	struct net_rpl_parent *best = NULL;
 	int i;
 
-	for (i = 0; i < CONFIG_NET_IPV6_MAX_NEIGHBORS; i++) {
+	for (i = 0; i < CONFIG_NET_RPL_MAX_PARENTS; i++) {
 		struct net_nbr *nbr = get_nbr(i);
 		struct net_rpl_parent *parent;
 
@@ -1944,7 +1965,7 @@ static void nullify_parents(struct net_if *iface,
 
 	NET_DBG("Nullifying parents (minimum rank %u)", minimum_rank);
 
-	for (i = 0; i < CONFIG_NET_IPV6_MAX_NEIGHBORS; i++) {
+	for (i = 0; i < CONFIG_NET_RPL_MAX_PARENTS; i++) {
 		struct net_nbr *nbr = get_nbr(i);
 		struct net_rpl_parent *parent;
 
@@ -2044,7 +2065,7 @@ static bool net_rpl_process_parent_event(struct net_if *iface,
 	return ret;
 }
 
-static bool net_rpl_repair_root(u8_t instance_id)
+bool net_rpl_repair_root(u8_t instance_id)
 {
 	struct net_rpl_instance *instance;
 
@@ -3287,13 +3308,30 @@ static int forwarding_dao(struct net_rpl_instance *instance,
 	return r;
 }
 
+static bool is_root(struct net_rpl_instance *instance)
+{
+	if (!(instance && instance->current_dag)) {
+		return false;
+	}
+
+	if (instance->current_dag->preferred_parent) {
+		return false;
+	}
+
+	if (instance->current_dag->rank != NET_RPL_ROOT_RANK(instance)) {
+		return false;
+	}
+
+	return true;
+}
+
 static enum net_verdict handle_dao(struct net_pkt *pkt)
 {
 	struct in6_addr *dao_sender = &NET_IPV6_HDR(pkt)->src;
+	struct net_rpl_route_entry *extra = NULL;
 	struct net_rpl_parent *parent = NULL;
 	enum net_rpl_route_source learned_from;
 	struct net_rpl_instance *instance;
-	struct net_rpl_route_entry *extra;
 	struct net_route_entry *route;
 	struct net_rpl_dag *dag;
 	struct net_buf *frag;
@@ -3458,24 +3496,16 @@ static enum net_verdict handle_dao(struct net_pkt *pkt)
 	}
 #endif
 
-	route = net_route_lookup(net_pkt_iface(pkt), &addr);
-	if (!route) {
-		NET_DBG("No route to %s for iface %p",
-			net_sprint_ipv6_addr(&addr), net_pkt_iface(pkt));
-		return NET_DROP;
-	}
-
-	nbr = net_route_get_nbr(route);
-	if (!nbr) {
-		return NET_DROP;
-	}
-
-	extra = net_nbr_extra_data(nbr);
-
 	if (lifetime == NET_RPL_ZERO_LIFETIME) {
 		struct in6_addr *nexthop;
 
 		NET_DBG("No-Path DAO received");
+
+		route = net_route_lookup(net_pkt_iface(pkt), &addr);
+		nbr = net_route_get_nbr(route);
+		if (nbr) {
+			extra = net_nbr_extra_data(nbr);
+		}
 
 		nexthop = net_route_get_nexthop(route);
 
@@ -3551,6 +3581,7 @@ static enum net_verdict handle_dao(struct net_pkt *pkt)
 		return NET_DROP;
 	}
 
+	extra = net_nbr_extra_data(nbr);
 	if (extra) {
 		extra->lifetime = net_rpl_lifetime(instance, lifetime);
 		extra->route_source = learned_from;
@@ -3574,6 +3605,24 @@ fwd_dao:
 			if (r >= 0) {
 				net_pkt_unref(pkt);
 				return NET_OK;
+			}
+		} else {
+			if (IS_ENABLED(CONFIG_NET_RPL_DAO_ACK) &&
+			    (flags & NET_RPL_DAO_K_FLAG) &&
+			    is_root(instance)) {
+				r = dao_ack_send(&NET_IPV6_HDR(pkt)->dst,
+						 &NET_IPV6_HDR(pkt)->src,
+						 net_pkt_iface(pkt),
+						 instance, sequence, 0);
+				if (r >= 0) {
+					NET_DBG("Sending DAO-ACK to %s "
+						"(iface %p)",
+						net_sprint_ipv6_addr(
+						      &NET_IPV6_HDR(pkt)->src),
+						net_pkt_iface(pkt));
+					net_pkt_unref(pkt);
+					return NET_OK;
+				}
 			}
 		}
 	}
@@ -4148,7 +4197,7 @@ static void dis_timeout(struct k_work *work)
 
 	NET_DBG("DIS Timer triggered at %u", k_uptime_get_32());
 
-	net_rpl_dis_send(NULL, NULL);
+	net_rpl_dis_send(NULL, rpl_default_iface);
 
 	dis_interval = CONFIG_NET_RPL_DIS_INTERVAL * MSEC_PER_SEC;
 
@@ -4185,8 +4234,8 @@ void net_rpl_init(void)
 	static struct net_if_link_cb link_cb;
 	struct in6_addr addr;
 
-	NET_DBG("Allocated %d routing entries (%zu bytes)",
-		CONFIG_NET_IPV6_MAX_NEIGHBORS,
+	NET_DBG("Allocated %d parent routing entries (%zu bytes)",
+		CONFIG_NET_RPL_MAX_PARENTS,
 		sizeof(net_rpl_neighbor_pool));
 
 #if defined(CONFIG_NET_STATISTICS_RPL)
@@ -4197,8 +4246,18 @@ void net_rpl_init(void)
 
 	net_rpl_init_timers();
 
+#if defined(CONFIG_NET_RPL_L2_IEEE802154)
+	rpl_default_iface = net_if_get_ieee802154();
+#endif
+
+	if (!rpl_default_iface) {
+		rpl_default_iface = net_if_get_default();
+	}
+
+	NET_DBG("Default interface is %p", rpl_default_iface);
+
 	create_linklocal_rplnodes_mcast(&addr);
-	if (!net_if_ipv6_maddr_add(net_if_get_default(), &addr)) {
+	if (!net_if_ipv6_maddr_add(rpl_default_iface, &addr)) {
 		NET_ERR("Cannot create RPL multicast address");
 
 		/* Ignore error at this point */

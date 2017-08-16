@@ -9,6 +9,10 @@
 	aliases {
 		adc_0 = &adc0;
 		adc_1 = &adc1;
+		pwm_0 = &pwm0;
+		pwm_1 = &pwm1;
+		pwm_2 = &pwm2;
+		pwm_3 = &pwm3;
 		uart_0 = &uart0;
 		uart_3 = &uart3;
 		pinmux_a = &pinmux_a;
@@ -30,7 +34,7 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,console = &uart0;
-#ifdef CONFIG_BLUETOOTH
+#ifdef CONFIG_BT
 		zephyr,bt-uart = &uart3;
 #endif
 		zephyr,uart-pipe = &uart0;
@@ -49,12 +53,16 @@
 	status = "ok";
 };
 
+&pwm3 {
+	status = "ok";
+};
+
 &uart0 {
 	status = "ok";
 	current-speed = <115200>;
 };
 
-#ifdef CONFIG_BLUETOOTH
+#ifdef CONFIG_BT
 &uart3 {
 	status = "ok";
 	current-speed = <115200>;

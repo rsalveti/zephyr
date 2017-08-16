@@ -9,6 +9,22 @@
 
 #include "lwm2m_object.h"
 
+#define LWM2M_PROTOCOL_VERSION "1.0"
+
+/* LWM2M / CoAP Content-Formats */
+#define LWM2M_FORMAT_PLAIN_TEXT		0
+#define LWM2M_FORMAT_APP_LINK_FORMAT	40
+#define LWM2M_FORMAT_APP_OCTET_STREAM	42
+#define LWM2M_FORMAT_APP_EXI		47
+#define LWM2M_FORMAT_APP_JSON		50
+#define LWM2M_FORMAT_OMA_PLAIN_TEXT	1541
+#define LWM2M_FORMAT_OMA_OLD_TLV	1542
+#define LWM2M_FORMAT_OMA_OLD_JSON	1543
+#define LWM2M_FORMAT_OMA_OLD_OPAQUE	1544
+#define LWM2M_FORMAT_OMA_TLV		11542
+#define LWM2M_FORMAT_OMA_JSON		11543
+
+
 #define ZOAP_RESPONSE_CODE_CLASS(x)	(x >> 5)
 #define ZOAP_RESPONSE_CODE_DETAIL(x)	(x & 0x1F)
 
@@ -50,9 +66,11 @@ int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst,
 			struct lwm2m_engine_obj_field *obj_field,
 			struct lwm2m_engine_context *context);
 
+int lwm2m_udp_sendto(struct net_pkt *pkt, const struct sockaddr *dst_addr);
 void lwm2m_udp_receive(struct net_context *ctx, struct net_pkt *pkt,
 		       struct zoap_pending *zpendings, int num_zpendings,
 		       struct zoap_reply *zreplies, int num_zreplies,
+		       bool handle_separate_response,
 		       int (*udp_request_handler)(struct zoap_packet *request,
 				struct zoap_packet *response,
 				struct sockaddr *from_addr));

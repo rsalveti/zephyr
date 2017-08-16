@@ -5,7 +5,6 @@ dtb-$(CONFIG_BOARD_FRDM_KW41Z)		=	frdm_kw41z.dts_compiled
 dtb-$(CONFIG_BOARD_FRDM_KL25Z)		=	frdm_kl25z.dts_compiled
 dtb-$(CONFIG_BOARD_HEXIWEAR_K64)	=	hexiwear_k64.dts_compiled
 dtb-$(CONFIG_BOARD_HEXIWEAR_KW40Z)	=	hexiwear_kw40z.dts_compiled
-dtb-$(CONFIG_BOARD_CC3200_LAUNCHXL)	=	cc3200_launchxl.dts_compiled
 dtb-$(CONFIG_BOARD_CC3220SF_LAUNCHXL)	=	cc3220sf_launchxl.dts_compiled
 dtb-$(CONFIG_BOARD_NUCLEO_L476RG)	=	nucleo_l476rg.dts_compiled
 dtb-$(CONFIG_BOARD_NUCLEO_L432KC)	=	nucleo_l432kc.dts_compiled
@@ -46,5 +45,8 @@ dtb-$(CONFIG_BOARD_OLIMEX_STM32_E407)	=	olimex_stm32_e407.dts_compiled
 dtb-$(CONFIG_BOARD_CC2650_SENSORTAG)	= 	cc2650_sensortag.dts_compiled
 dtb-$(CONFIG_BOARD_STM32_MIN_DEV)	=	stm32_min_dev.dts_compiled
 dtb-$(CONFIG_BOARD_STM32F3_DISCO)       =       stm32f3_disco.dts_compiled
+dtb-$(CONFIG_BOARD_OLIMEX_STM32_P405)	=	olimex_stm32_p405.dts_compiled
+dtb-$(CONFIG_BOARD_STM32F429I_DISC1)	=	stm32f429i_disc1.dts_compiled
+
 always	:= $(dtb-y)
 endif

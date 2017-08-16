@@ -82,11 +82,15 @@ struct net_pkt {
 				 * packet before EOF
 				 * Used only if defined(CONFIG_NET_TCP)
 				 */
+	u8_t pkt_queued: 1;	/* For outgoing packet: is this packet queued
+				 * to be sent but has not reached the driver
+				 * yet. Used only if defined(CONFIG_NET_TCP)
+				 */
 	u8_t forwarding : 1;	/* Are we forwarding this pkt
 				 * Used only if defined(CONFIG_NET_ROUTE)
 				 */
 	u8_t family     : 4;	/* IPv4 vs IPv6 */
-	u8_t _unused    : 4;
+	u8_t _unused    : 3;
 
 #if defined(CONFIG_NET_IPV6)
 	u8_t ipv6_hop_limit;	/* IPv6 hop limit for this network packet. */
@@ -131,7 +135,7 @@ static inline struct net_context *net_pkt_context(struct net_pkt *pkt)
 }
 
 static inline void net_pkt_set_context(struct net_pkt *pkt,
-					struct net_context *ctx)
+				       struct net_context *ctx)
 {
 	pkt->context = ctx;
 }
@@ -201,6 +205,16 @@ static inline u8_t net_pkt_sent(struct net_pkt *pkt)
 static inline void net_pkt_set_sent(struct net_pkt *pkt, bool sent)
 {
 	pkt->sent_or_eof = sent;
+}
+
+static inline u8_t net_pkt_queued(struct net_pkt *pkt)
+{
+	return pkt->pkt_queued;
+}
+
+static inline void net_pkt_set_queued(struct net_pkt *pkt, bool send)
+{
+	pkt->pkt_queued = send;
 }
 
 #if defined(CONFIG_NET_SOCKETS)
@@ -392,7 +406,7 @@ static inline u8_t net_pkt_ieee802154_rssi(struct net_pkt *pkt)
 }
 
 static inline void net_pkt_set_ieee802154_rssi(struct net_pkt *pkt,
-						u8_t rssi)
+					       u8_t rssi)
 {
 	pkt->ieee802154_rssi = rssi;
 }

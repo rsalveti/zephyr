@@ -347,7 +347,7 @@ static inline enum net_verdict net_if_recv_data(struct net_if *iface,
  * @return Return the link layer header size
  */
 static inline u16_t net_if_get_ll_reserve(struct net_if *iface,
-					     const struct in6_addr *dst_ip6)
+					  const struct in6_addr *dst_ip6)
 {
 	return iface->l2->reserve(iface, (void *)dst_ip6);
 }
@@ -528,6 +528,29 @@ static inline void net_if_router_rm(struct net_if_router *router)
  * @return Default interface or NULL if no interfaces are configured.
  */
 struct net_if *net_if_get_default(void);
+
+/**
+ * @brief Get the first network interface according to its type.
+ *
+ * @param l2 Layer 2 type of the network interface.
+ *
+ * @return First network interface of a given type or NULL if no such
+ * interfaces was found.
+ */
+struct net_if *net_if_get_first_by_type(const struct net_l2 *l2);
+
+#if defined(CONFIG_NET_L2_IEEE802154)
+/**
+ * @brief Get the first IEEE 802.15.4 network interface.
+ *
+ * @return First IEEE 802.15.4 network interface or NULL if no such
+ * interfaces was found.
+ */
+static inline struct net_if *net_if_get_ieee802154(void)
+{
+	return net_if_get_first_by_type(&NET_L2_GET_NAME(IEEE802154));
+}
+#endif /* CONFIG_NET_L2_IEEE802154 */
 
 #if defined(CONFIG_NET_IPV6)
 /**
@@ -1169,7 +1192,7 @@ typedef void (*net_if_cb_t)(struct net_if *iface, void *user_data);
  * @brief Go through all the network interfaces and call callback
  * for each interface.
  *
- * @param cb User supplied callback function to call
+ * @param cb User-supplied callback function to call
  * @param user_data User specified data
  */
 void net_if_foreach(net_if_cb_t cb, void *user_data);

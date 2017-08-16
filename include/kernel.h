@@ -1313,9 +1313,12 @@ extern u32_t k_uptime_delta_32(s64_t *reftime);
  */
 
 struct k_queue {
-	_wait_q_t wait_q;
 	sys_slist_t data_q;
-	_POLL_EVENT;
+	union {
+		_wait_q_t wait_q;
+
+		_POLL_EVENT;
+	};
 
 	_OBJECT_TRACING_NEXT_PTR(k_queue);
 };
@@ -1464,6 +1467,25 @@ extern void k_queue_merge_slist(struct k_queue *queue, sys_slist_t *list);
  * without waiting, or waiting period timed out.
  */
 extern void *k_queue_get(struct k_queue *queue, s32_t timeout);
+
+/**
+ * @brief Remove an element from a queue.
+ *
+ * This routine removes data item from @a queue. The first 32 bits of the
+ * data item are reserved for the kernel's use. Removing elements from k_queue
+ * rely on sys_slist_find_and_remove which is not a constant time operation.
+ *
+ * @note Can be called by ISRs
+ *
+ * @param queue Address of the queue.
+ * @param data Address of the data item.
+ *
+ * @return true if data item was removed
+ */
+static inline bool k_queue_remove(struct k_queue *queue, void *data)
+{
+	return sys_slist_find_and_remove(&queue->data_q, (sys_snode_t *)data);
+}
 
 /**
  * @brief Query a queue to see if it has data available.
@@ -1935,7 +1957,7 @@ typedef void (*k_work_handler_t)(struct k_work *work);
  */
 
 struct k_work_q {
-	struct k_fifo fifo;
+	struct k_queue queue;
 	struct k_thread thread;
 };
 
@@ -1944,7 +1966,7 @@ enum {
 };
 
 struct k_work {
-	void *_reserved;		/* Used by k_fifo implementation. */
+	void *_reserved;		/* Used by k_queue implementation. */
 	k_work_handler_t handler;
 	atomic_t flags[1];
 };
@@ -2027,7 +2049,7 @@ static inline void k_work_submit_to_queue(struct k_work_q *work_q,
 					  struct k_work *work)
 {
 	if (!atomic_test_and_set_bit(work->flags, K_WORK_STATE_PENDING)) {
-		k_fifo_put(&work_q->fifo, work);
+		k_queue_append(&work_q->queue, work);
 	}
 }
 
