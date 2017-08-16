@@ -16,6 +16,4 @@ Requirements
 Building and Running
 ********************
 
-See :ref:`bluetooth setup section <bluetooth_setup>` for general
-details. Refer to :ref:`96b_carbon_nrf51_bluetooth` for instructions
-specific to the 96Boards Carbon board.
+See :ref:`bluetooth setup section <bluetooth_setup>` for details.

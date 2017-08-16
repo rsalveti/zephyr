@@ -59,8 +59,6 @@ Connections and IOs
 The SWD debug pins are broken out to an external header; all other
 connected pins are to the main STM32F401RET chip.
 
-.. _96b_carbon_nrf51_programming:
-
 Programming and Debugging
 *************************
 
@@ -118,31 +116,6 @@ As an aid to debugging, this board configuration directs a console
 output to a currently unused pin connected to the STM32F401RET. Users
 who are experienced in electronics rework can remove a resistor (R22)
 on the board and attach a wire to the nRF51822's UART output.
-
-.. _96b_carbon_nrf51_bluetooth:
-
-Providing Bluetooth to 96b_carbon
-*********************************
-
-This 96b_carbon_nrf51 Zephyr configuration can be used to provide
-Bluetooth functionality from the secondary nRF51832 chip to the
-primary STM32F401RE chip on the :ref:`96b_carbon_board`.
-
-To do this, build the ``samples/bluetooth/hci_spi/`` application
-provided with Zephyr with ``BOARD=96b_carbon_nrf51``, then flash it to
-the nRF51832 chip using the instructions :ref:`above
-<96b_carbon_nrf51_programming>`. (For instructions on how to build a
-Zephyr application, see :ref:`build_an_application`.)
-
-.. warning::
-
-   **Do not flash the hci_spi application on the STM32F401RET chip on
-   the 96Boards Carbon.**
-
-   Both chips are supported by Zephyr and exist on the same physical
-   board hardware, but the hci_spi application must run on the nRF51
-   chip supported by the 96b_carbon_nrf51 Zephyr configuration
-   described on this page.
 
 References
 **********
