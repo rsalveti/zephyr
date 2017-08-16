@@ -489,19 +489,6 @@ static void recv_cb(struct net_context *net_ctx, struct net_pkt *pkt,
 	}
 
 	if (!pkt || net_pkt_appdatalen(pkt) == 0) {
-		/*
-		 * pkt == NULL is a TCP_FIN message for the TCP callback
-		 * (this means the connection is now closed)
-		 * if we get here and req.wait.count is still 0 this means
-		 * an http request received a server response without a body
-		 * some methods like POST, etc this is completely normal.
-		 * Let's hand back the semaphore and let the app continue
-		 * without generating an ETIMEDOUT error.
-		 */
-		if (ctx->req.wait.count == 0) {
-			k_sem_give(&ctx->req.wait);
-		}
-
 		goto out;
 	}
 
