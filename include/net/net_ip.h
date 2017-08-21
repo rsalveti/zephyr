@@ -135,13 +135,19 @@ struct sockaddr_in_ptr {
 #endif
 
 struct sockaddr {
-	sa_family_t family;
+	sa_family_t sa_family;
 	char data[NET_SOCKADDR_MAX_SIZE - sizeof(sa_family_t)];
 };
 
 struct sockaddr_ptr {
 	sa_family_t family;
 	char data[NET_SOCKADDR_PTR_MAX_SIZE - sizeof(sa_family_t)];
+};
+
+/* Same as sockaddr in our case */
+struct sockaddr_storage {
+	sa_family_t ss_family;
+	char data[NET_SOCKADDR_MAX_SIZE - sizeof(sa_family_t)];
 };
 
 struct net_addr {

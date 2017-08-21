@@ -1,4 +1,4 @@
-# Kconfig - BSD Sockets like API
+# Kconfig - BSD Sockets compatible API
 
 #
 # Copyright (c) 2017 Linaro Limited.
@@ -7,7 +7,7 @@
 #
 
 menuconfig NET_SOCKETS
-	bool "BSD Sockets like API"
+	bool "BSD Sockets compatible API"
 	default n
 	help
 	Provide BSD Sockets like API on top of native Zephyr networking API.
@@ -23,7 +23,7 @@ config NET_SOCKETS_POSIX_NAMES
 	with standard POSIX names like socket(), recv(), and close(), to help
 	with porting existing code. Note that close() may require a special
 	attention, as in POSIX it closes any file descriptor, while with this
-	option enaled, it will still apply only to sockets.
+	option enabled, it will still apply only to sockets.
 
 config NET_SOCKETS_POLL_MAX
 	int
@@ -33,7 +33,7 @@ config NET_SOCKETS_POLL_MAX
 	Maximum number of entries supported for poll() call.
 
 config NET_DEBUG_SOCKETS
-	bool "Debug BSD Sockets like API calls"
+	bool "Debug BSD Sockets compatible API calls"
 	default n
 	help
 	Enables logging for sockets code. (Logging level is defined by

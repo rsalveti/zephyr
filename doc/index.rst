@@ -22,6 +22,14 @@ Zephyr Project Documentation
 
    `Zephyr 1.5.0`_ | `Zephyr 1.6.0`_ | `Zephyr 1.7.0`_ | `Zephyr 1.8.0`_
 
+For more information about previous releases, please consult the published
+:ref:`zephyr_release_notes`.
+
+The Zephyr OS is provided under the :download:`Apache 2.0 license<../LICENSE>`.
+The Zephyr OS also imports or reuses packages, scripts, and other files that
+are not covered by the Apache License. A list of those licenses can be found
+under :ref:`zephyr_licensing`.
+
 Source code for the Zephyr Project is maintained in the
 `Zephyr Project GitHub repository`_.
 
@@ -36,28 +44,20 @@ Sections
 
    introduction/introducing_zephyr.rst
    getting_started/getting_started.rst
-   boards/boards.rst
-   kernel/kernel.rst
-   application/application.rst
-   porting/porting.rst
-   drivers/drivers.rst
-   dts/device_tree.rst
-   subsystems/subsystems.rst
-   api/api.rst
-   samples/samples.rst
-   reference/kconfig/index.rst
    contribute/contribute.rst
-   release-notes.rst
-   LICENSING.rst
-   glossary.rst
-
+   kernel/kernel.rst
+   security/security.rst
+   application/index.rst
+   boards/boards.rst
+   devices/index.rst
+   subsystems/subsystems.rst
 
 Indices and Tables
 ******************
 
-* :ref:`genindex`
+* :ref:`glossary`
 
-* :ref:`search`
+* :ref:`genindex`
 
 .. _Zephyr 1.8.0: https://www.zephyrproject.org/doc/1.8.0/
 .. _Zephyr 1.7.0: https://www.zephyrproject.org/doc/1.7.0/

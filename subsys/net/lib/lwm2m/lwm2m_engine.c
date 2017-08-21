@@ -56,6 +56,26 @@
 
 #define DISCOVER_PREFACE	"</.well-known/core>;ct=40"
 
+/*
+ * TODO: to implement a way for clients to specify alternate path
+ * via Kconfig (LwM2M specification 8.2.2 Alternate Path)
+ *
+ * For now, in order to inform server we support JSON format, we have to
+ * report 'ct=11543' to the server. '</>' is required in order to append
+ * content attribute. And resource type attribute is appended because of
+ * Eclipse wakaama will reject the registration when 'rt="oma.lwm2m"' is
+ * missing.
+ */
+
+#define RESOURCE_TYPE		";rt=\"oma.lwm2m\""
+
+#if defined(CONFIG_LWM2M_RW_JSON_SUPPORT)
+#define REG_PREFACE		"</>" RESOURCE_TYPE \
+				";ct=" STRINGIFY(LWM2M_FORMAT_OMA_JSON)
+#else
+#define REG_PREFACE		""
+#endif
+
 #define BUF_ALLOC_TIMEOUT K_SECONDS(1)
 
 struct observe_node {
@@ -98,19 +118,19 @@ char *lwm2m_sprint_ip_addr(const struct sockaddr *addr)
 	static char buf[NET_IPV6_ADDR_LEN];
 
 #if defined(CONFIG_NET_IPV6)
-	if (addr->family == AF_INET6) {
+	if (addr->sa_family == AF_INET6) {
 		return net_addr_ntop(AF_INET6, &net_sin6(addr)->sin6_addr,
 				     buf, sizeof(buf));
 	}
 #endif
 #if defined(CONFIG_NET_IPV4)
-	if (addr->family == AF_INET) {
+	if (addr->sa_family == AF_INET) {
 		return net_addr_ntop(AF_INET, &net_sin(addr)->sin_addr,
 				     buf, sizeof(buf));
 	}
 #endif
 
-	SYS_LOG_ERR("Unknown IP address family:%d", addr->family);
+	SYS_LOG_ERR("Unknown IP address family:%d", addr->sa_family);
 	return NULL;
 }
 
@@ -370,7 +390,11 @@ int lwm2m_create_obj_inst(u16_t obj_id, u16_t obj_inst_id,
 	if (!*obj_inst) {
 		SYS_LOG_ERR("unable to create obj %u instance %u",
 			    obj_id, obj_inst_id);
-		return -EINVAL;
+		/*
+		 * Already checked for instance count total.
+		 * This can only be an error if the object instance exists.
+		 */
+		return -EEXIST;
 	}
 
 	obj->instance_count++;
@@ -585,16 +609,29 @@ u16_t lwm2m_get_rd_data(u8_t *client_data, u16_t size)
 	u16_t pos = 0;
 	int len;
 
+	/* Add resource-type/content-type to the registration message */
+	memcpy(client_data, REG_PREFACE, sizeof(REG_PREFACE) - 1);
+	pos += sizeof(REG_PREFACE) - 1;
+
 	SYS_SLIST_FOR_EACH_CONTAINER(&engine_obj_list, obj, node) {
-		len = snprintf(temp, sizeof(temp), "%s</%u>",
-			       (pos > 0) ? "," : "", obj->obj_id);
-		if (pos + len >= size) {
-			/* full buffer -- exit loop */
-			break;
+		/* Security obj MUST NOT be part of registration message */
+		if (obj->obj_id == LWM2M_OBJECT_SECURITY_ID) {
+			continue;
 		}
 
-		memcpy(&client_data[pos], temp, len);
-		pos += len;
+		/* Only report <OBJ_ID> when no instance available */
+		if (obj->instance_count == 0) {
+			len = snprintf(temp, sizeof(temp), "%s</%u>",
+				       (pos > 0) ? "," : "", obj->obj_id);
+			if (pos + len >= size) {
+				/* full buffer -- exit loop */
+				break;
+			}
+
+			memcpy(&client_data[pos], temp, len);
+			pos += len;
+			continue;
+		}
 
 		SYS_SLIST_FOR_EACH_CONTAINER(&engine_obj_inst_list,
 					     obj_inst, node) {
@@ -1816,8 +1853,10 @@ static int do_discover_op(struct lwm2m_engine_context *context)
 	out->outlen += strlen(DISCOVER_PREFACE);
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&engine_obj_inst_list, obj_inst, node) {
-		/* avoid discovery for security and server objects */
-		if (obj_inst->obj->obj_id <= LWM2M_OBJECT_SERVER_ID) {
+		/* TODO: support bootstrap discover
+		 * Avoid discovery for security object (5.2.7.3)
+		 */
+		if (obj_inst->obj->obj_id == LWM2M_OBJECT_SECURITY_ID) {
 			continue;
 		}
 
@@ -2008,7 +2047,7 @@ static int handle_request(struct zoap_packet *request,
 	case ZOAP_METHOD_POST:
 		if (path.level < 2) {
 			/* write/create a object instance */
-			context.operation = LWM2M_OP_WRITE;
+			context.operation = LWM2M_OP_CREATE;
 		} else {
 			context.operation = LWM2M_OP_EXECUTE;
 		}
@@ -2088,6 +2127,7 @@ static int handle_request(struct zoap_packet *request,
 		break;
 
 	case LWM2M_OP_WRITE:
+	case LWM2M_OP_CREATE:
 		r = do_write_op(obj, &context, format);
 		break;
 
@@ -2125,6 +2165,10 @@ static int handle_request(struct zoap_packet *request,
 		} else if (r == -EPERM) {
 			zoap_header_set_code(out.out_zpkt,
 					     ZOAP_RESPONSE_CODE_NOT_ALLOWED);
+			r = 0;
+		} else if (r == -EEXIST) {
+			zoap_header_set_code(out.out_zpkt,
+					     ZOAP_RESPONSE_CODE_BAD_REQUEST);
 			r = 0;
 		} else {
 			/* Failed to handle the request */

@@ -227,6 +227,8 @@ static void test_init(void)
 		DBG("Cannot add IPv6 address %s\n",
 		       net_sprint_ipv6_addr(&ll_addr));
 		zassert_not_null(ifaddr, "ll_addr");
+
+		return;
 	}
 
 	ifaddr->addr_state = NET_ADDR_PREFERRED;
@@ -239,6 +241,8 @@ static void test_init(void)
 		DBG("Cannot add IPv4 address %s\n",
 		       net_sprint_ipv4_addr(&my_addr2));
 		zassert_not_null(ifaddr, "addr2");
+
+		return;
 	}
 
 	ifaddr->addr_state = NET_ADDR_PREFERRED;
@@ -366,7 +370,7 @@ static void dns_query_ipv4_server_count(void)
 			continue;
 		}
 
-		if (ctx->servers[i].dns_server.family == AF_INET) {
+		if (ctx->servers[i].dns_server.sa_family == AF_INET) {
 			count++;
 		}
 
@@ -394,7 +398,7 @@ static void dns_query_ipv6_server_count(void)
 			continue;
 		}
 
-		if (ctx->servers[i].dns_server.family == AF_INET6) {
+		if (ctx->servers[i].dns_server.sa_family == AF_INET6) {
 			count++;
 		}
 
